@@ -1,0 +1,1 @@
+"""Camera segment module tests."""

@@ -10,22 +10,33 @@ Media frame source, camera-segment repository, configuration.
 
 ## Checklist
 
-- [ ] `SEG-001` Define stable, unstable, and transition segment domain types.
-- [ ] `SEG-002` Implement low-resolution frame sampling for camera-motion analysis.
-- [ ] `SEG-003` Implement global-motion and scene-change feature extraction.
-- [ ] `SEG-004` Classify setup motion and mid-video camera changes.
-- [ ] `SEG-005` Merge short noisy classifications into stable ranges.
-- [ ] `SEG-006` Enforce minimum stable-segment duration.
-- [ ] `SEG-007` Produce stable segment start/end timestamps and confidence.
-- [ ] `SEG-008` Choose and store a representative frame for each stable segment.
-- [ ] `SEG-009` Mark unstable ranges so downstream tracking and shot logic skip them.
-- [ ] `SEG-010` Reset calibration and tracking scopes at every stable-segment boundary.
-- [ ] `SEG-011` Add tests for fixed camera, setup movement, one angle change, repeated bumps, hard cuts, and short videos.
-- [ ] `SEG-012` Add benchmark diagnostics showing detected boundaries over a source timeline.
+- [x] `SEG-001` Define stable, unstable, and transition segment domain types.
+- [x] `SEG-002` Implement low-resolution frame sampling for camera-motion analysis.
+- [x] `SEG-003` Implement global-motion and scene-change feature extraction.
+- [x] `SEG-004` Classify setup motion and mid-video camera changes.
+- [x] `SEG-005` Merge short noisy classifications into stable ranges.
+- [x] `SEG-006` Enforce minimum stable-segment duration.
+- [x] `SEG-007` Produce stable segment start/end timestamps and confidence.
+- [x] `SEG-008` Choose and store a representative frame for each stable segment.
+- [x] `SEG-009` Mark unstable ranges so downstream tracking and shot logic skip them.
+- [x] `SEG-010` Reset calibration and tracking scopes at every stable-segment boundary.
+- [x] `SEG-011` Add tests for fixed camera, setup movement, one angle change, repeated bumps, hard cuts, and short videos.
+- [x] `SEG-012` Add benchmark diagnostics showing detected boundaries over a source timeline.
 
 ## Completion Criteria
 
-- [ ] Stable segments are deterministic for the same configuration.
-- [ ] Downstream modules receive no continuous track across a camera change.
-- [ ] Boundary evaluation can be compared with manually labeled timestamps.
+- [x] Stable segments are deterministic for the same configuration.
+- [x] Downstream modules receive no continuous track across a camera change.
+- [x] Boundary evaluation can be compared with manually labeled timestamps.
 
+## Verification
+
+- Full repository test suite: 57 passed.
+- Camera Segment coverage: 96.34%.
+- `mypy --strict src/shotsight2 tests`: passed.
+- `ruff check .`: passed.
+- `ruff format --check` for Camera Segment-owned source and tests: passed.
+- Generated deterministic fixtures cover fixed camera, setup movement, one
+  angle change, repeated bumps, hard cuts, short footage, representative-frame
+  extraction, scope resets, and JSON timeline diagnostics with manual boundary
+  evaluation.
