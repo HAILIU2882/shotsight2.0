@@ -1,0 +1,1 @@
+"""ShotSight test suite."""

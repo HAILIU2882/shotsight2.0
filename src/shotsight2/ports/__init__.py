@@ -1,1 +1,1 @@
-"""Application-facing ports implemented by infrastructure adapters."""
+"""Storage- and framework-neutral interfaces implemented by adapters."""
