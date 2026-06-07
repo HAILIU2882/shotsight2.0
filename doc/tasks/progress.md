@@ -27,7 +27,7 @@
 
 ## Analysis Pipeline
 
-- [ ] [Camera Segment](camera-segment.md)
+- [x] [Camera Segment](camera-segment.md)
 - [ ] [Calibration](calibration.md)
 - [ ] [Tracking](tracking.md)
 - [ ] [Track Association](track-association.md)
