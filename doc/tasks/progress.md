@@ -10,11 +10,11 @@
 
 ## Foundation and Infrastructure
 
-- [ ] [Persistence](persistence.md)
+- [x] [Persistence](persistence.md)
 - [x] [Artifact Store](artifact-store.md)
 - [x] [Media Processing](media-processing.md)
 - [ ] [Worker Queue](worker-queue.md)
-- [ ] [Tracking Backend Selection](tracking-backend-selection.md)
+- [x] [Tracking Backend Selection](tracking-backend-selection.md)
 
 ## Core Application
 

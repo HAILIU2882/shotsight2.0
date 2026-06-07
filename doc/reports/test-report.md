@@ -46,6 +46,15 @@ and baseline formatting before its module can pass the quality gate.
 
 ## Completed Module Validation
 
+### Persistence
+
+- Merged to `main` on 2026-06-07.
+- 13 module tests passed.
+- Independent coverage result: 93.62%.
+- Full `mypy --strict`, Ruff lint, and formatting checks passed.
+- SQLite migrations, transactions, publication, repository contracts, and
+  foreign-key behavior were reviewed before merge.
+
 ### Artifact Store
 
 - Merged to `main` on 2026-06-07.
@@ -62,3 +71,19 @@ and baseline formatting before its module can pass the quality gate.
 - `mypy --strict`, Ruff lint, and module formatting checks passed.
 - FFmpeg subprocess, atomic-output, and diagnostic behavior were reviewed
   before merge.
+
+### Tracking Backend Selection
+
+- Merged to `main` on 2026-06-07 after one review-fix cycle.
+- 12 module and health-integration tests passed.
+- Independent coverage result: 91.99%.
+- Full `mypy --strict`, Ruff lint, and formatting checks passed.
+- `/health` now reports lazy backend capability probes without importing
+  optional AI packages at application startup.
+
+### Foundation Integration
+
+- 65 tests passed after merging Persistence, Artifact Store, Media Processing,
+  and Tracking Backend Selection.
+- Full strict mypy, Ruff lint, and Ruff format checks passed on the integrated
+  `main` tree.
