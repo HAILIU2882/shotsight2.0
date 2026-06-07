@@ -24,3 +24,22 @@
 
 The first owning foundation module must repair the package/test configuration
 and baseline formatting before its module can pass the quality gate.
+
+## Environment Validation
+
+- Docker CLI `29.5.3` and Colima `0.10.3` installed successfully with Homebrew.
+- Colima started with 4 CPUs, 8 GB memory, and a 40 GB requested disk profile.
+- Baseline Docker image `shotsight2:baseline` built successfully.
+- Temporary container health response on port `4174`:
+  `{"status":"ok","environment":"development","sam3_enabled":false}`.
+
+## Required Real-Video Fixture
+
+- Path: `/Users/hailiu/Desktop/bball_pt2.mov`
+- Container: QuickTime/MOV
+- Video codec: H.264
+- Resolution: 640x360
+- Frame rate: 60 FPS
+- Duration: 91.228 seconds
+- Size: 44,784,379 bytes
+- Repository policy: external fixture; never copied or committed.
