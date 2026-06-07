@@ -97,3 +97,13 @@ and baseline formatting before its module can pass the quality gate.
 - Review fix replaced a duplicate repository port with the canonical SQLite
   camera-segment repository contract and added a real persistence integration
   test.
+
+### Worker Queue
+
+- Merged to `main` on 2026-06-08 after one review-fix cycle.
+- 94 tests passed in the integrated Worker Queue branch.
+- Independent module coverage result: 90.87%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- Review fix repaired strict typing for correlated log records and removed a
+  migration whitespace violation before merge.
