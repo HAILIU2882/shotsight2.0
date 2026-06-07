@@ -10,6 +10,7 @@ import threading
 import time
 from datetime import timedelta
 from pathlib import Path
+from typing import Protocol, cast
 
 import pytest
 
@@ -20,6 +21,13 @@ from shotsight2.domain.jobs import QueueMessage
 from shotsight2.worker.cli import _database_path, _load_handler, build_parser, main
 from shotsight2.worker.process import PollingBackoff, WorkerProcess
 from tests.worker_queue.conftest import NOW
+
+
+class CorrelatedLogRecord(Protocol):
+    """Typed view of log records carrying worker correlation extras."""
+
+    job_id: str
+    run_id: str
 
 
 def importable_handler(message: QueueMessage) -> None:
@@ -44,7 +52,9 @@ def test_worker_acknowledges_and_logs_correlated_identifiers(
     assert handled == [message]
     completed = SQLiteJobRepository(database).get(message.job_id)
     assert completed is not None and completed.status is JobStatus.COMPLETED
-    job_record = next(record for record in caplog.records if record.message == "job_completed")
+    job_record = cast(
+        CorrelatedLogRecord, next(record for record in caplog.records if record.message == "job_completed")
+    )
     assert job_record.job_id == message.job_id
     assert job_record.run_id == message.run_id
 

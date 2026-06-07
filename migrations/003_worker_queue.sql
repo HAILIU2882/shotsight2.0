@@ -7,4 +7,3 @@ CREATE TABLE worker_heartbeats (
     stopped_at TEXT
 );
 CREATE INDEX idx_worker_heartbeats_alive ON worker_heartbeats(stopped_at, heartbeat_at);
-
