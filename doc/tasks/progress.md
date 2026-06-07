@@ -11,8 +11,8 @@
 ## Foundation and Infrastructure
 
 - [ ] [Persistence](persistence.md)
-- [ ] [Artifact Store](artifact-store.md)
-- [ ] [Media Processing](media-processing.md)
+- [x] [Artifact Store](artifact-store.md)
+- [x] [Media Processing](media-processing.md)
 - [ ] [Worker Queue](worker-queue.md)
 - [ ] [Tracking Backend Selection](tracking-backend-selection.md)
 

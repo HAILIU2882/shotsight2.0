@@ -43,3 +43,22 @@ and baseline formatting before its module can pass the quality gate.
 - Duration: 91.228 seconds
 - Size: 44,784,379 bytes
 - Repository policy: external fixture; never copied or committed.
+
+## Completed Module Validation
+
+### Artifact Store
+
+- Merged to `main` on 2026-06-07.
+- 17 module tests passed.
+- Independent coverage result: 94.41%.
+- `mypy --strict`, Ruff lint, and module formatting checks passed.
+- Diff and filesystem safety behavior were reviewed before merge.
+
+### Media Processing
+
+- Merged to `main` on 2026-06-07.
+- 22 module tests passed against generated FFmpeg fixtures.
+- Independent coverage result: 93.84%.
+- `mypy --strict`, Ruff lint, and module formatting checks passed.
+- FFmpeg subprocess, atomic-output, and diagnostic behavior were reviewed
+  before merge.
