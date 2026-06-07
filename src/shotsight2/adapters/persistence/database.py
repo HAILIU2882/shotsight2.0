@@ -83,8 +83,7 @@ class SQLiteDatabase:
                 """
             )
             applied = {
-                int(row["version"])
-                for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
+                int(row["version"]) for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
             }
             for migration_file in migration_files:
                 try:
