@@ -31,12 +31,17 @@ Media frame source, camera-segment repository, configuration.
 
 ## Verification
 
-- Full repository test suite: 57 passed.
-- Camera Segment coverage: 96.34%.
+- Full repository test suite after merging Persistence: 81 passed.
+- Camera Segment module suite: 16 passed.
+- Camera Segment coverage: 96.39%.
 - `mypy --strict src/shotsight2 tests`: passed.
 - `ruff check .`: passed.
-- `ruff format --check` for Camera Segment-owned source and tests: passed.
+- `ruff format --check .`: passed.
 - Generated deterministic fixtures cover fixed camera, setup movement, one
   angle change, repeated bumps, hard cuts, short footage, representative-frame
   extraction, scope resets, and JSON timeline diagnostics with manual boundary
   evaluation.
+- The service converts rich timeline ranges to the canonical persistence
+  `CameraSegment` contract and round-trips them through the real file-backed
+  `SQLiteCameraSegmentRepository`, retaining representative frame paths in the
+  current `representative_artifact_id` field.

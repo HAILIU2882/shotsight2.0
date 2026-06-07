@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from uuid import UUID, uuid5
+from uuid import NAMESPACE_URL, uuid5
 
 import cv2
 import numpy as np
 
+from shotsight2.domain import CameraSegment as PersistenceCameraSegment
 from shotsight2.domain.camera_segments import (
     CameraSegment,
     CameraSegmentConfig,
@@ -21,11 +22,11 @@ from shotsight2.domain.camera_segments import (
 from shotsight2.domain.media import FrameExtractionRequest
 from shotsight2.ports.camera_segments import (
     CameraFrameSource,
-    CameraSegmentRepository,
     GrayFrame,
     SampledFrame,
 )
 from shotsight2.ports.media import MediaTool
+from shotsight2.ports.repositories import CameraSegmentRepository
 
 
 class CameraSegmentService:
@@ -46,7 +47,7 @@ class CameraSegmentService:
     def detect(
         self,
         source: Path,
-        analysis_run_id: UUID,
+        analysis_run_id: str,
         representative_directory: Path,
     ) -> CameraSegmentTimeline:
         """Detect and optionally persist a complete camera-stability timeline."""
@@ -91,13 +92,16 @@ class CameraSegmentService:
             features=features,
         )
         if self._repository is not None:
-            self._repository.replace_for_run(analysis_run_id, timeline)
+            self._repository.replace_for_run(
+                analysis_run_id,
+                to_persistence_segments(timeline),
+            )
         return timeline
 
     def _create_stable_segments(
         self,
         *,
-        analysis_run_id: UUID,
+        analysis_run_id: str,
         source: Path,
         representative_directory: Path,
         ranges: Sequence[StabilityRange],
@@ -415,5 +419,42 @@ def _interval_groups(intervals: Sequence[ClassifiedInterval]) -> list[tuple[int,
     return groups
 
 
-def _scoped_id(namespace: UUID, name: str) -> UUID:
-    return uuid5(namespace, name)
+def to_persistence_segments(
+    timeline: CameraSegmentTimeline,
+) -> tuple[PersistenceCameraSegment, ...]:
+    """Convert the rich timeline into canonical repository records."""
+
+    stable_by_range = {(segment.start_seconds, segment.end_seconds): segment for segment in timeline.stable_segments}
+    records: list[PersistenceCameraSegment] = []
+    for index, timeline_range in enumerate(timeline.ranges):
+        stable_segment = stable_by_range.get((timeline_range.start_seconds, timeline_range.end_seconds))
+        segment_id = (
+            stable_segment.id
+            if stable_segment is not None
+            else _scoped_id(
+                timeline.analysis_run_id,
+                (
+                    f"range:{index}:{timeline_range.status.value}:"
+                    f"{timeline_range.start_seconds:.6f}:{timeline_range.end_seconds:.6f}"
+                ),
+            )
+        )
+        records.append(
+            PersistenceCameraSegment(
+                id=segment_id,
+                analysis_run_id=timeline.analysis_run_id,
+                start_seconds=timeline_range.start_seconds,
+                end_seconds=timeline_range.end_seconds,
+                stability_status=timeline_range.status.value.upper(),
+                confidence=timeline_range.confidence,
+                representative_artifact_id=(
+                    str(stable_segment.representative_frame) if stable_segment is not None else None
+                ),
+            )
+        )
+    return tuple(records)
+
+
+def _scoped_id(namespace: str, name: str) -> str:
+    scope = uuid5(NAMESPACE_URL, namespace)
+    return str(uuid5(scope, name))

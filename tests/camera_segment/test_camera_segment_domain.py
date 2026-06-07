@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import uuid4
 
 import numpy as np
 import pytest
@@ -134,7 +133,7 @@ def test_timeline_exposes_downstream_skip_decision() -> None:
     """Tracking and shot stages can reject unstable timestamps directly."""
 
     timeline = CameraSegmentTimeline(
-        analysis_run_id=uuid4(),
+        analysis_run_id="run-domain",
         source=Path("proxy.mp4"),
         duration_seconds=2.0,
         ranges=(

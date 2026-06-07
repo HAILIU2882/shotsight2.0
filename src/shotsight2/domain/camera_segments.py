@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from uuid import UUID
 
 
 class StabilityStatus(StrEnum):
@@ -94,15 +93,15 @@ class StabilityRange:
 class CameraSegment:
     """A stable camera viewpoint with independent downstream state scopes."""
 
-    id: UUID
-    analysis_run_id: UUID
+    id: str
+    analysis_run_id: str
     start_seconds: float
     end_seconds: float
     confidence: float
     representative_frame: Path
     representative_timestamp_seconds: float
-    calibration_scope_id: UUID
-    tracking_scope_id: UUID
+    calibration_scope_id: str
+    tracking_scope_id: str
 
     @property
     def duration_seconds(self) -> float:
@@ -115,7 +114,7 @@ class CameraSegment:
 class CameraSegmentTimeline:
     """Complete segmentation output consumed by persistence and downstream stages."""
 
-    analysis_run_id: UUID
+    analysis_run_id: str
     source: Path
     duration_seconds: float
     ranges: tuple[StabilityRange, ...]

@@ -3,20 +3,35 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
 
 import pytest
 
 from shotsight2.adapters.ffmpeg import FFmpegAdapter
 from shotsight2.adapters.opencv import OpenCVFrameSource
+from shotsight2.adapters.persistence import (
+    SQLiteAnalysisRunRepository,
+    SQLiteCameraSegmentRepository,
+    SQLiteDatabase,
+    SQLiteVideoRepository,
+)
+from shotsight2.domain import (
+    AnalysisRun,
+    AnalysisStage,
+    RunStatus,
+    Video,
+)
+from shotsight2.domain import (
+    CameraSegment as PersistenceCameraSegment,
+)
 from shotsight2.domain.camera_segments import (
     CameraSegmentConfig,
-    CameraSegmentTimeline,
     ManualBoundary,
     StabilityStatus,
 )
+from shotsight2.ports.repositories import CameraSegmentRepository
 from shotsight2.services.camera_segment_diagnostics import (
     evaluate_boundaries,
     timeline_diagnostic,
@@ -28,16 +43,27 @@ VideoFactory = Callable[[str, float], Path]
 
 
 class RecordingRepository:
-    """Small repository spy proving the service publishes one complete timeline."""
+    """Canonical repository spy proving the service publishes storage records."""
 
     def __init__(self) -> None:
-        self.saved: tuple[UUID, CameraSegmentTimeline] | None = None
+        self.saved: tuple[str, tuple[PersistenceCameraSegment, ...]] | None = None
 
-    def replace_for_run(self, analysis_run_id: UUID, timeline: CameraSegmentTimeline) -> None:
-        self.saved = (analysis_run_id, timeline)
+    def replace_for_run(
+        self,
+        run_id: str,
+        segments: Sequence[PersistenceCameraSegment],
+    ) -> None:
+        self.saved = (run_id, tuple(segments))
+
+    def list_for_run(self, run_id: str) -> list[PersistenceCameraSegment]:
+        if self.saved is None or self.saved[0] != run_id:
+            return []
+        return list(self.saved[1])
 
 
-def _service(repository: RecordingRepository | None = None) -> CameraSegmentService:
+def _service(
+    repository: CameraSegmentRepository | None = None,
+) -> CameraSegmentService:
     return CameraSegmentService(
         FFmpegAdapter(),
         OpenCVFrameSource(),
@@ -63,7 +89,7 @@ def test_fixed_camera_produces_one_deterministic_stable_segment(
     """Local object motion does not split a fixed camera viewpoint."""
 
     source = video_factory("fixed", 6.0)
-    run_id = uuid4()
+    run_id = "run-fixed"
     repository = RecordingRepository()
 
     first = _service(repository).detect(source, run_id, tmp_path / "representatives")
@@ -75,7 +101,13 @@ def test_fixed_camera_produces_one_deterministic_stable_segment(
     assert first.stable_segments[0].representative_frame.exists()
     assert first.stable_segments[0].id == second.stable_segments[0].id
     assert first.ranges == second.ranges
-    assert repository.saved == (run_id, first)
+    assert repository.saved is not None
+    assert repository.saved[0] == run_id
+    assert len(repository.saved[1]) == 1
+    persisted = repository.saved[1][0]
+    assert persisted.id == first.stable_segments[0].id
+    assert persisted.stability_status == "STABLE"
+    assert persisted.representative_artifact_id == str(first.stable_segments[0].representative_frame)
 
 
 def test_setup_movement_is_skipped_before_stable_viewpoint(
@@ -86,7 +118,7 @@ def test_setup_movement_is_skipped_before_stable_viewpoint(
 
     timeline = _service().detect(
         video_factory("setup", 6.0),
-        uuid4(),
+        "run-setup",
         tmp_path / "representatives",
     )
 
@@ -105,7 +137,7 @@ def test_angle_change_creates_independent_tracking_and_calibration_scopes(
 
     timeline = _service().detect(
         video_factory("angle", 7.0),
-        uuid4(),
+        "run-angle",
         tmp_path / "representatives",
     )
 
@@ -129,7 +161,7 @@ def test_repeated_camera_bumps_create_multiple_skip_ranges(
 
     timeline = _service().detect(
         video_factory("bumps", 7.0),
-        uuid4(),
+        "run-bumps",
         tmp_path / "representatives",
     )
 
@@ -149,7 +181,7 @@ def test_hard_cut_boundary_matches_manual_label_and_writes_diagnostic(
 
     timeline = _service().detect(
         video_factory("hard-cut", 7.0),
-        uuid4(),
+        "run-hard-cut",
         tmp_path / "representatives",
     )
     evaluation = evaluate_boundaries(
@@ -182,7 +214,7 @@ def test_short_video_has_no_stable_segment(
 
     timeline = _service().detect(
         video_factory("short", 0.7),
-        uuid4(),
+        "run-short",
         tmp_path / "representatives",
     )
 
@@ -198,7 +230,7 @@ def test_boundary_evaluation_reports_misses_extras_and_invalid_tolerance(
 
     timeline = _service().detect(
         video_factory("hard-cut", 7.0),
-        uuid4(),
+        "run-evaluation",
         tmp_path / "representatives",
     )
     evaluation = evaluate_boundaries(
@@ -214,3 +246,58 @@ def test_boundary_evaluation_reports_misses_extras_and_invalid_tolerance(
     assert timeline_diagnostic(timeline)["detected_boundaries_seconds"]
     with pytest.raises(ValueError):
         evaluate_boundaries(timeline, (), tolerance_seconds=-1)
+
+
+def test_service_persists_through_real_sqlite_repository(
+    video_factory: VideoFactory,
+    tmp_path: Path,
+) -> None:
+    """The production SQLite repository accepts converted rich timeline records."""
+
+    source = video_factory("angle", 7.0)
+    database = SQLiteDatabase(tmp_path / "shotsight2.db")
+    database.migrate()
+    video = Video(
+        id="video-camera-integration",
+        filename=source.name,
+        original_artifact_id="original-camera-integration",
+        size_bytes=source.stat().st_size,
+        duration_seconds=7.0,
+        width=220,
+        height=120,
+        fps=10.0,
+        codec="h264",
+        container="mp4",
+        created_at=datetime(2026, 6, 7, tzinfo=UTC),
+    )
+    run = AnalysisRun(
+        id="run-camera-integration",
+        video_id=video.id,
+        status=RunStatus.RUNNING,
+        backend_name="test",
+        backend_version="1",
+        configuration={"profile": "balanced"},
+        progress=0.2,
+        stage=AnalysisStage.SEGMENTING_CAMERA,
+        started_at=datetime(2026, 6, 7, tzinfo=UTC),
+    )
+    SQLiteVideoRepository(database).create(video)
+    SQLiteAnalysisRunRepository(database).create(run)
+    repository = SQLiteCameraSegmentRepository(database)
+
+    timeline = _service(repository).detect(
+        source,
+        run.id,
+        tmp_path / "representatives",
+    )
+    stored = repository.list_for_run(run.id)
+
+    assert len(stored) == len(timeline.ranges)
+    assert [segment.stability_status for segment in stored] == [
+        timeline_range.status.value.upper() for timeline_range in timeline.ranges
+    ]
+    stable_records = [segment for segment in stored if segment.stability_status == "STABLE"]
+    assert [segment.id for segment in stable_records] == [segment.id for segment in timeline.stable_segments]
+    assert [segment.representative_artifact_id for segment in stable_records] == [
+        str(segment.representative_frame) for segment in timeline.stable_segments
+    ]
