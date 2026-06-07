@@ -1,5 +1,6 @@
 """Domain models and shot-analysis rules."""
 
+from shotsight2.domain.jobs import ClaimedJob, QueueMessage
 from shotsight2.domain.persistence import (
     AnalysisJob,
     AnalysisRun,
@@ -31,9 +32,11 @@ __all__ = [
     "BallTrack",
     "Calibration",
     "CameraSegment",
+    "ClaimedJob",
     "EffectiveShotAttempt",
     "JobStatus",
     "PlayerTrack",
+    "QueueMessage",
     "ReviewCorrection",
     "ReviewStatus",
     "RunStatus",

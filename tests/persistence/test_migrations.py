@@ -17,8 +17,8 @@ def test_empty_database_upgrades_idempotently(tmp_path: Path) -> None:
     database = SQLiteDatabase(tmp_path / "empty.db")
 
     assert database.schema_version() == 0
-    assert database.migrate() == 2
-    assert database.migrate() == 2
+    assert database.migrate() == 3
+    assert database.migrate() == 3
 
     with database.read() as connection:
         tables = {
@@ -27,8 +27,15 @@ def test_empty_database_upgrades_idempotently(tmp_path: Path) -> None:
         }
         versions = connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
 
-    assert {"videos", "analysis_runs", "shot_attempts", "review_corrections", "database_metadata"} <= tables
-    assert [int(row["version"]) for row in versions] == [1, 2]
+    assert {
+        "videos",
+        "analysis_runs",
+        "shot_attempts",
+        "review_corrections",
+        "database_metadata",
+        "worker_heartbeats",
+    } <= tables
+    assert [int(row["version"]) for row in versions] == [1, 2, 3]
 
 
 def test_missing_migrations_are_rejected(tmp_path: Path) -> None:
@@ -101,7 +108,7 @@ def test_backup_metadata_has_no_media_content(database: SQLiteDatabase, video: V
 
     metadata = SQLiteDiagnosticRepository(database).backup_metadata()
 
-    assert metadata.schema_version == 2
+    assert metadata.schema_version == 3
     assert metadata.video_count == 1
     assert metadata.analysis_run_count == 0
     assert metadata.database_size_bytes > 0
