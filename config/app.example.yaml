@@ -1,0 +1,22 @@
+video:
+  max_duration_minutes: 30
+  max_upload_bytes: 1073741824
+  accepted_inputs: ffmpeg-decodable
+  analysis_resolution_policy: adaptive
+
+tracking:
+  preferred_backend: sam3
+  allow_backend_fallback: true
+  automatic_prompt: basketball
+  allow_manual_reinitialization: true
+  segment_on_camera_change: true
+
+court:
+  standard: nba
+  coordinates: meters
+  allow_manual_calibration: true
+
+review:
+  allow_attempt_override: true
+  allow_result_override: true
+

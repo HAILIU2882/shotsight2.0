@@ -1,0 +1,6 @@
+# Install the official SAM 3 repository separately after checkpoint access is
+# approved. Keep it isolated from the core app until the technical spike passes.
+torch>=2.7
+torchvision
+huggingface_hub
+
