@@ -31,9 +31,11 @@ Tracking backend registry, platform inspection, model store, configuration.
 
 ## Evidence
 
-- `BackendCapabilityStatus` and `build_backend_capability_status` provide the
-  route-neutral backend status consumed by `/health`. The Application API module
-  owns the HTTP route wiring.
-- The full test suite passes with 11 tests and 91.92% coverage, above the
+- `/health` returns system details, every probed backend's capabilities and
+  readiness reason, the selected backend, and any override or selection error.
+- Optional MLX, PyTorch, SAM 3, and OpenCV imports remain deferred until the
+  health request executes its capability probes.
+- The full test suite passes with 12 tests and 92.48% coverage, above the
   required 80%.
-- Strict mypy, Ruff lint, and Ruff format checks pass for all module-owned code.
+- `mypy --strict src tests` passes; full-repository Ruff lint and format checks
+  pass.

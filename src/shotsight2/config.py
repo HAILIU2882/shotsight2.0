@@ -19,8 +19,10 @@ class Settings(BaseSettings):
     max_video_minutes: int = 30
     default_language: str = "en"
     enable_sam3: bool = False
+    tracking_backend: str | None = None
+    mlx_model_path: Path | None = None
     sam3_model_path: Path | None = None
+    cpu_tracking_model_path: Path | None = None
 
 
 settings = Settings()
-

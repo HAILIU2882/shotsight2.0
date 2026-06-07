@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from shotsight2.domain.tracking_backends import (
     BackendCapabilities,
@@ -25,14 +25,7 @@ from shotsight2.domain.tracking_backends import (
 
 ModuleFinder = Callable[[str], bool]
 ModuleImporter = Callable[[str], ModuleType]
-
-
-class BackendProbe(Protocol):
-    """Callable capability check stored by the backend registry."""
-
-    def __call__(self, system: SystemProfile) -> BackendHealth:
-        """Inspect one backend without importing it until this call."""
-        ...
+BackendProbe = Callable[[SystemProfile], BackendHealth]
 
 
 @dataclass(frozen=True, slots=True)

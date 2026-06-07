@@ -102,9 +102,7 @@ def test_linux_selects_ready_cuda_backend(tmp_path: Path) -> None:
     """A supported NVIDIA environment should select official SAM 3.1."""
     model_path = tmp_path / "sam3.pt"
     model_path.touch()
-    torch_module = _module("torch", "2.7.0")
-    torch_module.cuda = _FakeCuda()
-    torch_module.version = SimpleNamespace(cuda="12.6")
+    torch_module = _FakeTorchModule()
     modules = {
         "torch": torch_module,
         "sam3": _module("sam3", "3.1.0"),
@@ -230,10 +228,25 @@ class _FakeCuda:
 
 
 def _module(name: str, version: str | None = None) -> ModuleType:
-    module = ModuleType(name)
-    if version is not None:
-        module.__version__ = version
-    return module
+    return ModuleType(name) if version is None else _VersionedModule(name, version)
+
+
+class _VersionedModule(ModuleType):
+    __version__: str
+
+    def __init__(self, name: str, version: str) -> None:
+        super().__init__(name)
+        self.__version__ = version
+
+
+class _FakeTorchModule(_VersionedModule):
+    cuda: _FakeCuda
+    version: SimpleNamespace
+
+    def __init__(self) -> None:
+        super().__init__("torch", "2.7.0")
+        self.cuda = _FakeCuda()
+        self.version = SimpleNamespace(cuda="12.6")
 
 
 def _capabilities() -> BackendCapabilities:
@@ -270,5 +283,13 @@ def _health(
 def _registry_with_reports(*reports: BackendHealth) -> BackendRegistry:
     registry = BackendRegistry()
     for report in reports:
-        registry.register(report.name, lambda _, value=report: value)
+        registry.register(report.name, _StaticProbe(report))
     return registry
+
+
+class _StaticProbe:
+    def __init__(self, report: BackendHealth) -> None:
+        self._report = report
+
+    def __call__(self, _: SystemProfile) -> BackendHealth:
+        return self._report
