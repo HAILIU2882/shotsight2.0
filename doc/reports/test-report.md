@@ -87,3 +87,13 @@ and baseline formatting before its module can pass the quality gate.
   and Tracking Backend Selection.
 - Full strict mypy, Ruff lint, and Ruff format checks passed on the integrated
   `main` tree.
+
+### Camera Segment
+
+- Merged to `main` on 2026-06-08 after one review-fix cycle.
+- 81 tests passed in the module worktree.
+- Independent coverage result: 96.26%.
+- Full `mypy --strict`, Ruff lint, and formatting checks passed.
+- Review fix replaced a duplicate repository port with the canonical SQLite
+  camera-segment repository contract and added a real persistence integration
+  test.
