@@ -1,0 +1,48 @@
+# ShotSight 2.0 Module Progress
+
+## Usage
+
+- Mark a module complete only when every checklist item and completion criterion
+  in the linked module file is complete.
+- Complete modules in dependency order unless a task explicitly uses a fake or
+  in-memory adapter.
+- Update this file in the same commit that completes a module.
+
+## Foundation and Infrastructure
+
+- [ ] [Persistence](persistence.md)
+- [ ] [Artifact Store](artifact-store.md)
+- [ ] [Media Processing](media-processing.md)
+- [ ] [Worker Queue](worker-queue.md)
+- [ ] [Tracking Backend Selection](tracking-backend-selection.md)
+
+## Core Application
+
+- [ ] [Video Ingestion](video-ingestion.md)
+- [ ] [Analysis Job](analysis-job.md)
+- [ ] [Video Library](video-library.md)
+- [ ] [Application API](application-api.md)
+- [ ] [Presentation](presentation.md)
+- [ ] [Deletion](deletion.md)
+
+## Analysis Pipeline
+
+- [ ] [Camera Segment](camera-segment.md)
+- [ ] [Calibration](calibration.md)
+- [ ] [Tracking](tracking.md)
+- [ ] [Track Association](track-association.md)
+- [ ] [Shot Lifecycle](shot-lifecycle.md)
+- [ ] [Outcome Classification](outcome-classification.md)
+- [ ] [Court Mapping](court-mapping.md)
+- [ ] [Artifact Rendering](artifact-rendering.md)
+- [ ] [Statistics](statistics.md)
+- [ ] [Review](review.md)
+- [ ] [Analysis Pipeline Orchestrator](analysis-pipeline.md)
+
+## Overall Release Gates
+
+- [ ] All 22 module checklists are complete.
+- [ ] End-to-end upload, analysis, review, reanalysis, and deletion tests pass.
+- [ ] Vision benchmark metrics are documented for every supported backend.
+- [ ] macOS, Windows, and Linux installation smoke tests pass.
+- [ ] The requirements traceability matrix has no unimplemented requirement.
