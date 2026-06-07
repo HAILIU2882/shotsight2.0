@@ -147,7 +147,10 @@ class FileSystemArtifactStore:
                     output.write(chunk)
                 output.flush()
                 os.fsync(output.fileno())
-            self._publish_no_replace(partial, destination)
+            if parsed.kind is ArtifactKind.TEMPORARY:
+                os.replace(partial, destination)
+            else:
+                self._publish_no_replace(partial, destination)
         except BaseException:
             partial.unlink(missing_ok=True)
             raise
