@@ -200,4 +200,3 @@ def rendered_frames(tmp_path: Path) -> Iterator[Path]:
         )
     )
     yield directory / "frame-%03d.png"
-

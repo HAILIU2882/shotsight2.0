@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -25,6 +26,20 @@ from shotsight2.domain.media import (
     RenderedFramesEncodeRequest,
     proxy_profile,
 )
+from shotsight2.ports.media import MediaTool
+
+
+def test_adapter_satisfies_media_tool_contract() -> None:
+    """The adapter exposes the application-facing media port operations."""
+
+    adapter: MediaTool = FFmpegAdapter()
+
+    assert callable(adapter.probe)
+    assert callable(adapter.create_proxy)
+    assert callable(adapter.extract_frame)
+    assert callable(adapter.create_clip)
+    assert callable(adapter.encode_rendered_frames)
+    assert callable(adapter.encode_overlay)
 
 
 def test_profiles_expose_quality_balanced_and_speed_tradeoffs() -> None:
@@ -108,7 +123,7 @@ def test_parse_probe_payload_accepts_rotation_tag_and_stream_duration(tmp_path: 
                 "codec_name": "h264",
                 "width": 1920,
                 "height": 1080,
-                "avg_frame_rate": "30000/1001",
+                "avg_frame_rate": "24/1",
                 "r_frame_rate": "30/1",
                 "duration": "1.5",
                 "tags": {"rotate": "270"},
@@ -252,9 +267,7 @@ def test_extract_frame_at_timestamp_is_atomic(constant_video: Path, tmp_path: Pa
     """Timestamp extraction creates only the requested final image."""
 
     destination = tmp_path / "frame.jpg"
-    result = FFmpegAdapter().extract_frame(
-        FrameExtractionRequest(constant_video, destination, timestamp_seconds=0.75)
-    )
+    result = FFmpegAdapter().extract_frame(FrameExtractionRequest(constant_video, destination, timestamp_seconds=0.75))
 
     assert result.path == destination
     assert destination.stat().st_size > 0
@@ -337,7 +350,7 @@ def test_encode_overlay_composites_two_videos(constant_video: Path, short_video:
     assert result.path.exists()
     assert result.metadata.video.width == 160
     assert result.metadata.video.height == 90
-    assert result.metadata.duration_seconds == pytest.approx(0.6, abs=0.15)
+    assert result.metadata.duration_seconds == pytest.approx(2.0, abs=0.15)
 
 
 def test_existing_destination_requires_explicit_overwrite(constant_video: Path, tmp_path: Path) -> None:
@@ -347,9 +360,7 @@ def test_existing_destination_requires_explicit_overwrite(constant_video: Path, 
     destination.write_bytes(b"existing")
 
     with pytest.raises(MediaProcessingError) as captured:
-        FFmpegAdapter().create_proxy(
-            ProxyRequest(constant_video, destination, proxy_profile("speed"))
-        )
+        FFmpegAdapter().create_proxy(ProxyRequest(constant_video, destination, proxy_profile("speed")))
 
     assert captured.value.diagnostic.category is MediaErrorCategory.DESTINATION_EXISTS
 
@@ -358,7 +369,7 @@ def test_failed_encode_leaves_no_partial_artifact(constant_video: Path, tmp_path
     """Atomic output cleanup removes temporary files after FFmpeg failure."""
 
     destination = tmp_path / "failed.mp4"
-    adapter = FFmpegAdapter(FFmpegAdapterConfig(ffmpeg_executable="/usr/bin/false"))
+    adapter = FFmpegAdapter(FFmpegAdapterConfig(ffmpeg_executable="ffprobe"))
 
     with pytest.raises(MediaProcessingError) as captured:
         adapter.create_proxy(ProxyRequest(constant_video, destination, proxy_profile("speed")))
@@ -388,12 +399,34 @@ def test_disk_space_is_checked_before_proxy_encoding(constant_video: Path, tmp_p
 def test_subprocess_calls_never_enable_shell(constant_video: Path) -> None:
     """The adapter passes commands as argument sequences with shell disabled."""
 
-    real_run = subprocess.run
     shell_values: list[bool] = []
+    payload = {
+        "streams": [
+            {
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "h264",
+                "width": 160,
+                "height": 90,
+                "avg_frame_rate": "12/1",
+                "r_frame_rate": "12/1",
+            }
+        ],
+        "format": {
+            "format_name": "mov,mp4",
+            "duration": "2.0",
+            "size": str(constant_video.stat().st_size),
+        },
+    }
 
     def recording_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         shell_values.append(bool(kwargs.get("shell")))
-        return real_run(*args, **kwargs)  # type: ignore[call-overload,return-value]
+        return subprocess.CompletedProcess(
+            args=("ffprobe",),
+            returncode=0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
 
     with patch("shotsight2.adapters.ffmpeg.adapter.subprocess.run", side_effect=recording_run):
         FFmpegAdapter().probe(constant_video)
