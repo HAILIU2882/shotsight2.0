@@ -23,7 +23,7 @@
 - [x] [Video Library](video-library.md)
 - [ ] [Application API](application-api.md)
 - [ ] [Presentation](presentation.md)
-- [ ] [Deletion](deletion.md)
+- [x] [Deletion](deletion.md)
 
 ## Analysis Pipeline
 

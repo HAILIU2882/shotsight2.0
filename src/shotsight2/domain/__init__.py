@@ -13,6 +13,13 @@ from shotsight2.domain.calibration import (
     NBACourtReferencePoint,
     RimGeometry,
 )
+from shotsight2.domain.deletion import (
+    DeletionFailure,
+    DeletionInventory,
+    DeletionRecordCounts,
+    DeletionResult,
+    DeletionStatus,
+)
 from shotsight2.domain.jobs import ClaimedJob, QueueMessage
 from shotsight2.domain.persistence import (
     AnalysisJob,
@@ -64,6 +71,11 @@ __all__ = [
     "ClaimedJob",
     "CourtCoordinate",
     "CourtReferenceObservation",
+    "DeletionFailure",
+    "DeletionInventory",
+    "DeletionRecordCounts",
+    "DeletionResult",
+    "DeletionStatus",
     "EffectiveShotAttempt",
     "ImagePoint",
     "JobStatus",
