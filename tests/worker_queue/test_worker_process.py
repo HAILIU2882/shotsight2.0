@@ -8,16 +8,17 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
 
 from shotsight2.adapters.persistence import SQLiteDatabase, SQLiteJobRepository
-from shotsight2.adapters.sqlite_queue import SQLiteWorkerQueue
+from shotsight2.adapters.sqlite_queue import ClaimLostError, SQLiteWorkerQueue
 from shotsight2.domain import JobStatus
-from shotsight2.domain.jobs import QueueMessage
+from shotsight2.domain.jobs import ClaimedJob, QueueMessage
+from shotsight2.domain.persistence import JsonObject
 from shotsight2.worker.cli import _database_path, _load_handler, build_parser, main
 from shotsight2.worker.process import PollingBackoff, WorkerProcess
 from tests.worker_queue.conftest import NOW
@@ -33,6 +34,74 @@ class CorrelatedLogRecord(Protocol):
 def importable_handler(message: QueueMessage) -> None:
     """Provide a module-level callable for CLI import tests."""
     del message
+
+
+class AckRaceQueue:
+    """Queue double that exposes heartbeats racing with terminal acknowledgement."""
+
+    def __init__(self, message: QueueMessage) -> None:
+        self._claim = ClaimedJob(message=message, worker_id="worker-1", claimed_at=NOW)
+        self._claimed = False
+        self.acknowledge_started = threading.Event()
+        self.heartbeat_during_acknowledge = threading.Event()
+        self.acknowledged = False
+
+    def enqueue(self, message: QueueMessage, *, enqueued_at: datetime) -> bool:
+        del message, enqueued_at
+        return True
+
+    def claim(
+        self,
+        worker_id: str,
+        *,
+        claimed_at: datetime,
+        stale_after: timedelta,
+    ) -> ClaimedJob | None:
+        del worker_id, claimed_at, stale_after
+        if self._claimed:
+            return None
+        self._claimed = True
+        return self._claim
+
+    def acknowledge(self, claim: ClaimedJob, *, acknowledged_at: datetime) -> None:
+        del claim, acknowledged_at
+        self.acknowledge_started.set()
+        self.heartbeat_during_acknowledge.wait(timeout=0.1)
+        self.acknowledged = True
+
+    def fail(
+        self,
+        claim: ClaimedJob,
+        error: JsonObject,
+        *,
+        failed_at: datetime,
+    ) -> None:
+        del claim, error, failed_at
+
+    def heartbeat(
+        self,
+        worker_id: str,
+        *,
+        heartbeat_at: datetime,
+        job_id: str | None = None,
+    ) -> None:
+        del worker_id, heartbeat_at
+        if job_id is not None and self.acknowledge_started.is_set():
+            self.heartbeat_during_acknowledge.set()
+            raise ClaimLostError(job_id)
+
+    def stop_worker(self, worker_id: str, *, stopped_at: datetime) -> None:
+        del worker_id, stopped_at
+
+    def is_worker_alive(
+        self,
+        worker_id: str,
+        *,
+        checked_at: datetime,
+        stale_after: timedelta,
+    ) -> bool:
+        del worker_id, checked_at, stale_after
+        return True
 
 
 def test_worker_acknowledges_and_logs_correlated_identifiers(
@@ -57,6 +126,24 @@ def test_worker_acknowledges_and_logs_correlated_identifiers(
     )
     assert job_record.job_id == message.job_id
     assert job_record.run_id == message.run_id
+
+
+def test_worker_stops_heartbeat_before_acknowledging_completed_job() -> None:
+    """A completion cannot race with a final claim heartbeat during shutdown."""
+    message = QueueMessage("job-1", "video-1", "run-1")
+    queue = AckRaceQueue(message)
+
+    WorkerProcess(
+        queue,
+        lambda handled: None,
+        worker_id="worker-1",
+        stale_after=timedelta(seconds=1),
+        heartbeat_interval=timedelta(milliseconds=1),
+        clock=lambda: NOW,
+    ).run(once=True)
+
+    assert queue.acknowledged
+    assert not queue.heartbeat_during_acknowledge.is_set()
 
 
 def test_worker_heartbeats_while_handler_is_running(
