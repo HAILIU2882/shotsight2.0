@@ -20,7 +20,7 @@
 
 - [x] [Video Ingestion](video-ingestion.md)
 - [x] [Analysis Job](analysis-job.md)
-- [ ] [Video Library](video-library.md)
+- [x] [Video Library](video-library.md)
 - [ ] [Application API](application-api.md)
 - [ ] [Presentation](presentation.md)
 - [ ] [Deletion](deletion.md)
@@ -35,7 +35,7 @@
 - [ ] [Outcome Classification](outcome-classification.md)
 - [ ] [Court Mapping](court-mapping.md)
 - [ ] [Artifact Rendering](artifact-rendering.md)
-- [ ] [Statistics](statistics.md)
+- [x] [Statistics](statistics.md)
 - [ ] [Review](review.md)
 - [ ] [Analysis Pipeline Orchestrator](analysis-pipeline.md)
 
