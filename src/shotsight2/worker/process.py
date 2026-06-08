@@ -112,21 +112,25 @@ class WorkerProcess:
         }
         LOGGER.info("job_started", extra=context)
         heartbeat.start()
+        handler_error: Exception | None = None
         try:
             self._handler(claim.message)
         except Exception as error:
-            LOGGER.exception("job_failed", extra=context)
+            handler_error = error
+        finally:
+            heartbeat_stop.set()
+            heartbeat.join()
+
+        if handler_error is not None:
+            LOGGER.exception("job_failed", extra=context, exc_info=handler_error)
             self._queue.fail(
                 claim,
-                {"type": type(error).__name__, "message": str(error)},
+                {"type": type(handler_error).__name__, "message": str(handler_error)},
                 failed_at=self._clock(),
             )
         else:
             self._queue.acknowledge(claim, acknowledged_at=self._clock())
             LOGGER.info("job_completed", extra=context)
-        finally:
-            heartbeat_stop.set()
-            heartbeat.join()
 
     def _heartbeat_claim(self, claim: ClaimedJob, stopping: threading.Event) -> None:
         interval = self._heartbeat_interval.total_seconds()
