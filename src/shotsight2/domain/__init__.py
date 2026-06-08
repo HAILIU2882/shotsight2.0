@@ -22,6 +22,16 @@ from shotsight2.domain.persistence import (
     Video,
     VideoStatus,
 )
+from shotsight2.domain.statistics import (
+    LocationGroupSummary,
+    PlayerShotSummary,
+    ReviewStatusSummary,
+    ShotChartPoint,
+    ShotSummary,
+    ShotTypeSummary,
+    VideoStatistics,
+    calculate_video_statistics,
+)
 
 __all__ = [
     "AnalysisJob",
@@ -35,14 +45,22 @@ __all__ = [
     "ClaimedJob",
     "EffectiveShotAttempt",
     "JobStatus",
+    "LocationGroupSummary",
     "PlayerTrack",
+    "PlayerShotSummary",
     "QueueMessage",
     "ReviewCorrection",
     "ReviewStatus",
+    "ReviewStatusSummary",
     "RunStatus",
     "ShotAttempt",
+    "ShotChartPoint",
     "ShotLocation",
     "ShotOutcome",
+    "ShotSummary",
+    "ShotTypeSummary",
+    "VideoStatistics",
     "Video",
     "VideoStatus",
+    "calculate_video_statistics",
 ]
