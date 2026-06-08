@@ -146,3 +146,14 @@ and baseline formatting before its module can pass the quality gate.
 - The module calculates correction-aware totals, player breakdowns,
   two/three-point summaries, review/low-confidence counts, and chart-ready
   grouped shot data from effective attempts.
+
+### Video Library
+
+- Merged to `main` on 2026-06-08 after updating against Statistics.
+- 129 tests passed in the integrated Video Library branch.
+- Independent focused coverage result: 95.69%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- The service provides read-only video cards, video details, analysis status,
+  published-result summaries, safe artifact references, and storage usage
+  projections.
