@@ -35,7 +35,7 @@
 - [ ] [Outcome Classification](outcome-classification.md)
 - [ ] [Court Mapping](court-mapping.md)
 - [ ] [Artifact Rendering](artifact-rendering.md)
-- [ ] [Statistics](statistics.md)
+- [x] [Statistics](statistics.md)
 - [ ] [Review](review.md)
 - [ ] [Analysis Pipeline Orchestrator](analysis-pipeline.md)
 
