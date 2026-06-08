@@ -21,6 +21,14 @@ from shotsight2.services.calibration import (
     LocationRecalculationTrigger,
     PresentationCalibrationModel,
 )
+from shotsight2.services.court_mapping import (
+    CourtMappingService,
+    LocationMissingReason,
+    LocationSource,
+    ManualLocation,
+    MappingResult,
+    ReleaseObservationProvider,
+)
 from shotsight2.services.deletion import ActiveVideoAnalysisError, DeletionError, VideoDeletionService
 from shotsight2.services.statistics import StatisticsService
 from shotsight2.services.video_ingestion import (
@@ -73,6 +81,7 @@ __all__ = [
     "CalibrationService",
     "CalibrationValidationError",
     "CorrectCalibrationCommand",
+    "CourtMappingService",
     "DeletionError",
     "FailureSummary",
     "IngestionDiagnostic",
@@ -81,9 +90,14 @@ __all__ = [
     "LibraryState",
     "LibraryStorageSummary",
     "LocationRecalculationTrigger",
+    "LocationMissingReason",
+    "LocationSource",
+    "ManualLocation",
+    "MappingResult",
     "PlayerSummary",
     "PresentationCalibrationModel",
     "ReviewSummary",
+    "ReleaseObservationProvider",
     "RunSummary",
     "ShootingSummary",
     "ShotTypeSummary",

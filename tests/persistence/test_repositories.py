@@ -261,6 +261,58 @@ def test_effective_attempts_keep_automatic_evidence(
     assert attempts.list_effective(video.id)[0].outcome is ShotOutcome.MISSED
 
 
+def test_court_mapping_atomically_refreshes_location_and_shot_type(
+    database: SQLiteDatabase,
+    video: Video,
+    run: AnalysisRun,
+) -> None:
+    """Calibration changes should update both derived values together."""
+    seed_run(database, video, run)
+    SQLitePlayerTrackRepository(database).replace_for_run(run.id, [player()])
+    attempts = SQLiteShotAttemptRepository(database)
+    attempts.replace_automatic_results(run.id, [attempt()], [location()])
+    recalculated = replace(
+        location(),
+        court_x_m=2.0,
+        court_y_m=-6.8,
+        normalized_x=0.25,
+        normalized_y=0.05,
+        region="LEFT_CORNER_THREE",
+    )
+
+    attempts.update_location_and_shot_type("attempt-1", recalculated, "THREE_POINT")
+
+    assert attempts.list_for_run(run.id)[0].shot_type == "THREE_POINT"
+    assert SQLiteShotLocationRepository(database).get_for_attempt("attempt-1") == recalculated
+
+
+def test_court_mapping_update_rejects_cross_attempt_location(
+    database: SQLiteDatabase,
+    video: Video,
+    run: AnalysisRun,
+) -> None:
+    seed_run(database, video, run)
+    repository = SQLiteShotAttemptRepository(database)
+    with pytest.raises(ValueError, match="requested attempt"):
+        repository.update_location_and_shot_type("attempt-1", location("attempt-2"), "TWO_POINT")
+
+
+def test_court_mapping_can_clear_stale_location(
+    database: SQLiteDatabase,
+    video: Video,
+    run: AnalysisRun,
+) -> None:
+    seed_run(database, video, run)
+    SQLitePlayerTrackRepository(database).replace_for_run(run.id, [player()])
+    repository = SQLiteShotAttemptRepository(database)
+    repository.replace_automatic_results(run.id, [attempt()], [location()])
+
+    repository.clear_location_and_shot_type("attempt-1", "UNKNOWN")
+
+    assert repository.list_for_run(run.id)[0].shot_type == "UNKNOWN"
+    assert SQLiteShotLocationRepository(database).get_for_attempt("attempt-1") is None
+
+
 def test_atomic_publication_preserves_previous_run_on_failure(
     database: SQLiteDatabase,
     video: Video,

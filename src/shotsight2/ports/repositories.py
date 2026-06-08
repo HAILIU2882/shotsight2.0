@@ -115,6 +115,19 @@ class ShotAttemptRepository(Protocol):
     def list_effective(self, video_id: str) -> list[EffectiveShotAttempt]: ...
 
 
+class CourtMappingAttemptRepository(Protocol):
+    """Read attempts and atomically refresh court-derived fields."""
+
+    def list_for_run(self, run_id: str) -> list[ShotAttempt]: ...
+    def update_location_and_shot_type(
+        self,
+        attempt_id: str,
+        location: ShotLocation,
+        shot_type: str,
+    ) -> None: ...
+    def clear_location_and_shot_type(self, attempt_id: str, shot_type: str) -> None: ...
+
+
 class ShotLocationRepository(Protocol):
     """Persist and retrieve automatic shot locations."""
 
