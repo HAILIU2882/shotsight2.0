@@ -33,7 +33,7 @@
 - [ ] [Track Association](track-association.md)
 - [ ] [Shot Lifecycle](shot-lifecycle.md)
 - [ ] [Outcome Classification](outcome-classification.md)
-- [ ] [Court Mapping](court-mapping.md)
+- [x] [Court Mapping](court-mapping.md)
 - [ ] [Artifact Rendering](artifact-rendering.md)
 - [x] [Statistics](statistics.md)
 - [ ] [Review](review.md)

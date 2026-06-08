@@ -935,6 +935,38 @@ class SQLiteShotAttemptRepository:
             ).fetchall()
             return [self._effective(connection, _attempt(row)) for row in rows]
 
+    def update_location_and_shot_type(
+        self,
+        attempt_id: str,
+        location: ShotLocation,
+        shot_type: str,
+    ) -> None:
+        """Atomically refresh derived location and point-value classification."""
+        if location.shot_attempt_id != attempt_id:
+            raise ValueError("Location must belong to the requested attempt")
+        with self._database.transaction() as connection:
+            updated = connection.execute(
+                "UPDATE shot_attempts SET shot_type = ? WHERE id = ?",
+                (shot_type, attempt_id),
+            )
+            if updated.rowcount != 1:
+                raise ValueError(f"Unknown shot attempt: {attempt_id}")
+            _upsert_location(connection, location)
+
+    def clear_location_and_shot_type(self, attempt_id: str, shot_type: str) -> None:
+        """Atomically remove a stale location when release geometry is missing."""
+        with self._database.transaction() as connection:
+            updated = connection.execute(
+                "UPDATE shot_attempts SET shot_type = ? WHERE id = ?",
+                (shot_type, attempt_id),
+            )
+            if updated.rowcount != 1:
+                raise ValueError(f"Unknown shot attempt: {attempt_id}")
+            connection.execute(
+                "DELETE FROM shot_locations WHERE shot_attempt_id = ?",
+                (attempt_id,),
+            )
+
     @staticmethod
     def _effective(connection: sqlite3.Connection, attempt: ShotAttempt) -> EffectiveShotAttempt:
         location_row = connection.execute(

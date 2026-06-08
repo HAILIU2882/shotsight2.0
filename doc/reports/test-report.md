@@ -180,3 +180,15 @@ and baseline formatting before its module can pass the quality gate.
   active jobs, marks videos deleting before cleanup, preserves shared model
   assets, leaves retryable `CLEANUP_INCOMPLETE` state on artifact failure, and
   deletes database rows in dependency order after successful artifact cleanup.
+
+### Court Mapping
+
+- Completed in `codex/court-mapping` on 2026-06-09.
+- 161 tests passed with integrated coverage of 93.98%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  checks passed.
+- The module defines a rim-centered NBA court in meters, named regions and
+  heatmap buckets, validates image-to-court homographies, estimates release-foot
+  positions, classifies NBA two/three geometry including corner lines, provides
+  indicative fallback positions, and recalculates derived locations after
+  calibration or shooter changes.
