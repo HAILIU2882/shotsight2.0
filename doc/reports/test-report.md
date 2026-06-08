@@ -157,3 +157,14 @@ and baseline formatting before its module can pass the quality gate.
 - The service provides read-only video cards, video details, analysis status,
   published-result summaries, safe artifact references, and storage usage
   projections.
+
+### Calibration
+
+- Merged to `main` on 2026-06-09 after updating against Statistics and Video
+  Library.
+- Independent focused coverage result: 90.30%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- The module versions automatic and user-corrected rim/NBA court calibration per
+  stable segment, supports indicative calibration when geometry is incomplete,
+  and emits a recalculation request after correction.
