@@ -168,3 +168,15 @@ and baseline formatting before its module can pass the quality gate.
 - The module versions automatic and user-corrected rim/NBA court calibration per
   stable segment, supports indicative calibration when geometry is incomplete,
   and emits a recalculation request after correction.
+
+### Deletion
+
+- Completed in `codex/deletion` on 2026-06-09.
+- 134 tests passed in the deletion worktree.
+- Integrated coverage result: 94.03%.
+- Full `mypy --strict`, Ruff lint, Ruff format, coverage, and `git diff --check`
+  checks passed.
+- The module inventories video-owned records and filesystem artifacts, rejects
+  active jobs, marks videos deleting before cleanup, preserves shared model
+  assets, leaves retryable `CLEANUP_INCOMPLETE` state on artifact failure, and
+  deletes database rows in dependency order after successful artifact cleanup.

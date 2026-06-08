@@ -31,6 +31,7 @@ from shotsight2.domain import (
     Video,
     VideoStatus,
 )
+from shotsight2.domain.deletion import DeletionRecordCounts
 from shotsight2.domain.persistence import JsonObject, JsonValue
 
 
@@ -1007,6 +1008,113 @@ class SQLiteArtifactRepository:
             return [_artifact(row) for row in rows]
 
 
+class SQLiteDeletionRepository:
+    """SQLite implementation for video deletion inventory and cleanup."""
+
+    def __init__(self, database: SQLiteDatabase) -> None:
+        self._database = database
+
+    def inventory_counts(self, video_id: str) -> DeletionRecordCounts:
+        """Count all database records owned by one video."""
+        with self._database.read() as connection:
+            return _deletion_counts(connection, video_id)
+
+    def prepare_video_deletion(self, video_id: str) -> list[AnalysisJob]:
+        """Mark a video deleting only when no queued or running job exists."""
+        with self._database.transaction() as connection:
+            active_jobs = _active_jobs_for_video(connection, video_id)
+            if active_jobs:
+                return active_jobs
+            cursor = connection.execute(
+                "UPDATE videos SET status = ? WHERE id = ?",
+                (VideoStatus.DELETING.value, video_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(video_id)
+            return []
+
+    def mark_cleanup_incomplete(self, video_id: str) -> None:
+        """Leave records in place and expose that retryable cleanup is needed."""
+        with self._database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE videos SET status = ? WHERE id = ?",
+                (VideoStatus.CLEANUP_INCOMPLETE.value, video_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(video_id)
+
+    def delete_owned_records(self, video_id: str) -> None:
+        """Delete video-owned rows in dependency order after filesystem cleanup."""
+        with self._database.transaction() as connection:
+            connection.execute(
+                """
+                DELETE FROM review_corrections
+                WHERE shot_attempt_id IN (
+                    SELECT shot_attempts.id
+                    FROM shot_attempts
+                    JOIN analysis_runs ON analysis_runs.id = shot_attempts.analysis_run_id
+                    WHERE analysis_runs.video_id = ?
+                )
+                """,
+                (video_id,),
+            )
+            connection.execute(
+                """
+                DELETE FROM shot_locations
+                WHERE shot_attempt_id IN (
+                    SELECT shot_attempts.id
+                    FROM shot_attempts
+                    JOIN analysis_runs ON analysis_runs.id = shot_attempts.analysis_run_id
+                    WHERE analysis_runs.video_id = ?
+                )
+                """,
+                (video_id,),
+            )
+            connection.execute(
+                """
+                DELETE FROM shot_attempts
+                WHERE analysis_run_id IN (SELECT id FROM analysis_runs WHERE video_id = ?)
+                """,
+                (video_id,),
+            )
+            connection.execute(
+                """
+                DELETE FROM ball_tracks
+                WHERE segment_id IN (
+                    SELECT camera_segments.id
+                    FROM camera_segments
+                    JOIN analysis_runs ON analysis_runs.id = camera_segments.analysis_run_id
+                    WHERE analysis_runs.video_id = ?
+                )
+                """,
+                (video_id,),
+            )
+            connection.execute(
+                """
+                DELETE FROM calibrations
+                WHERE segment_id IN (
+                    SELECT camera_segments.id
+                    FROM camera_segments
+                    JOIN analysis_runs ON analysis_runs.id = camera_segments.analysis_run_id
+                    WHERE analysis_runs.video_id = ?
+                )
+                """,
+                (video_id,),
+            )
+            connection.execute(
+                """
+                DELETE FROM camera_segments
+                WHERE analysis_run_id IN (SELECT id FROM analysis_runs WHERE video_id = ?)
+                """,
+                (video_id,),
+            )
+            connection.execute("DELETE FROM player_tracks WHERE video_id = ?", (video_id,))
+            connection.execute("DELETE FROM artifacts WHERE video_id = ?", (video_id,))
+            connection.execute("DELETE FROM analysis_jobs WHERE video_id = ?", (video_id,))
+            connection.execute("DELETE FROM analysis_runs WHERE video_id = ?", (video_id,))
+            connection.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+
+
 class SQLiteDiagnosticRepository:
     """Read diagnostic metadata without copying media or generated artifacts."""
 
@@ -1032,3 +1140,94 @@ def _database_size(path: Path) -> int:
     """Sum SQLite database, WAL, and shared-memory sidecar sizes."""
     candidates: Iterable[Path] = (path, Path(f"{path}-wal"), Path(f"{path}-shm"))
     return sum(candidate.stat().st_size for candidate in candidates if candidate.exists())
+
+
+def _count(connection: sqlite3.Connection, sql: str, video_id: str) -> int:
+    row = connection.execute(sql, (video_id,)).fetchone()
+    return 0 if row is None else int(row["count"])
+
+
+def _deletion_counts(connection: sqlite3.Connection, video_id: str) -> DeletionRecordCounts:
+    return DeletionRecordCounts(
+        videos=_count(connection, "SELECT COUNT(*) AS count FROM videos WHERE id = ?", video_id),
+        analysis_runs=_count(connection, "SELECT COUNT(*) AS count FROM analysis_runs WHERE video_id = ?", video_id),
+        analysis_jobs=_count(connection, "SELECT COUNT(*) AS count FROM analysis_jobs WHERE video_id = ?", video_id),
+        camera_segments=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM camera_segments
+            JOIN analysis_runs ON analysis_runs.id = camera_segments.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        calibrations=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM calibrations
+            JOIN camera_segments ON camera_segments.id = calibrations.segment_id
+            JOIN analysis_runs ON analysis_runs.id = camera_segments.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        player_tracks=_count(connection, "SELECT COUNT(*) AS count FROM player_tracks WHERE video_id = ?", video_id),
+        ball_tracks=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM ball_tracks
+            JOIN camera_segments ON camera_segments.id = ball_tracks.segment_id
+            JOIN analysis_runs ON analysis_runs.id = camera_segments.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        shot_attempts=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM shot_attempts
+            JOIN analysis_runs ON analysis_runs.id = shot_attempts.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        shot_locations=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM shot_locations
+            JOIN shot_attempts ON shot_attempts.id = shot_locations.shot_attempt_id
+            JOIN analysis_runs ON analysis_runs.id = shot_attempts.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        review_corrections=_count(
+            connection,
+            """
+            SELECT COUNT(*) AS count
+            FROM review_corrections
+            JOIN shot_attempts ON shot_attempts.id = review_corrections.shot_attempt_id
+            JOIN analysis_runs ON analysis_runs.id = shot_attempts.analysis_run_id
+            WHERE analysis_runs.video_id = ?
+            """,
+            video_id,
+        ),
+        artifact_metadata=_count(connection, "SELECT COUNT(*) AS count FROM artifacts WHERE video_id = ?", video_id),
+    )
+
+
+def _active_jobs_for_video(connection: sqlite3.Connection, video_id: str) -> list[AnalysisJob]:
+    rows = connection.execute(
+        """
+        SELECT * FROM analysis_jobs
+        WHERE video_id = ? AND status IN (?, ?)
+        ORDER BY created_at, id
+        """,
+        (video_id, JobStatus.QUEUED.value, JobStatus.RUNNING.value),
+    ).fetchall()
+    return [_job(row) for row in rows]

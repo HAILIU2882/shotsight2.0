@@ -21,6 +21,7 @@ from shotsight2.services.calibration import (
     LocationRecalculationTrigger,
     PresentationCalibrationModel,
 )
+from shotsight2.services.deletion import ActiveVideoAnalysisError, DeletionError, VideoDeletionService
 from shotsight2.services.statistics import StatisticsService
 from shotsight2.services.video_ingestion import (
     IngestionDiagnostic,
@@ -55,6 +56,7 @@ from shotsight2.services.video_library import (
 
 __all__ = [
     "ActiveAnalysisJobError",
+    "ActiveVideoAnalysisError",
     "AnalysisConfiguration",
     "AnalysisFailure",
     "AnalysisJobError",
@@ -71,6 +73,7 @@ __all__ = [
     "CalibrationService",
     "CalibrationValidationError",
     "CorrectCalibrationCommand",
+    "DeletionError",
     "FailureSummary",
     "IngestionDiagnostic",
     "InvalidAnalysisJobTransitionError",
@@ -90,6 +93,7 @@ __all__ = [
     "VideoNotReadyError",
     "VideoCard",
     "VideoDetail",
+    "VideoDeletionService",
     "VideoIngestionError",
     "VideoIngestionErrorCode",
     "VideoIngestionLimits",

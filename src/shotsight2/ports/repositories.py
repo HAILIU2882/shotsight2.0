@@ -22,6 +22,7 @@ from shotsight2.domain import (
     ShotLocation,
     Video,
 )
+from shotsight2.domain.deletion import DeletionRecordCounts
 from shotsight2.domain.persistence import JsonObject
 
 
@@ -135,6 +136,15 @@ class ArtifactRepository(Protocol):
     def add(self, artifact: Artifact) -> None: ...
     def list_for_run(self, run_id: str) -> list[Artifact]: ...
     def list_for_video(self, video_id: str) -> list[Artifact]: ...
+
+
+class DeletionRepository(Protocol):
+    """Coordinate deletion-specific inventory, lifecycle, and cleanup writes."""
+
+    def inventory_counts(self, video_id: str) -> DeletionRecordCounts: ...
+    def prepare_video_deletion(self, video_id: str) -> list[AnalysisJob]: ...
+    def mark_cleanup_incomplete(self, video_id: str) -> None: ...
+    def delete_owned_records(self, video_id: str) -> None: ...
 
 
 class DiagnosticRepository(Protocol):
