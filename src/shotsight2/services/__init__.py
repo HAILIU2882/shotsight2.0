@@ -13,6 +13,14 @@ from shotsight2.services.analysis_jobs import (
     VideoNotReadyError,
     WorkerLiveness,
 )
+from shotsight2.services.calibration import (
+    CalibrationRecalculationRequest,
+    CalibrationService,
+    CalibrationValidationError,
+    CorrectCalibrationCommand,
+    LocationRecalculationTrigger,
+    PresentationCalibrationModel,
+)
 from shotsight2.services.video_ingestion import (
     IngestionDiagnostic,
     UploadVideoCommand,
@@ -32,8 +40,14 @@ __all__ = [
     "AnalysisJobService",
     "AnalysisJobSnapshot",
     "AnalysisRunNotFoundError",
+    "CalibrationRecalculationRequest",
+    "CalibrationService",
+    "CalibrationValidationError",
+    "CorrectCalibrationCommand",
     "IngestionDiagnostic",
     "InvalidAnalysisJobTransitionError",
+    "LocationRecalculationTrigger",
+    "PresentationCalibrationModel",
     "UploadVideoCommand",
     "UploadVideoResult",
     "VideoNotReadyError",

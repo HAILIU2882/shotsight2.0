@@ -628,6 +628,12 @@ class SQLiteCameraSegmentRepository:
             ).fetchall()
             return [_segment(row) for row in rows]
 
+    def get(self, segment_id: str) -> CameraSegment | None:
+        """Return a camera segment by identifier."""
+        with self._database.read() as connection:
+            row = connection.execute("SELECT * FROM camera_segments WHERE id = ?", (segment_id,)).fetchone()
+            return None if row is None else _segment(row)
+
 
 class SQLiteCalibrationRepository:
     """SQLite implementation for append-only calibration versions."""

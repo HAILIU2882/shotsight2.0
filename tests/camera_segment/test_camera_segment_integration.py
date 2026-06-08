@@ -55,6 +55,11 @@ class RecordingRepository:
     ) -> None:
         self.saved = (run_id, tuple(segments))
 
+    def get(self, segment_id: str) -> PersistenceCameraSegment | None:
+        if self.saved is None:
+            return None
+        return next((segment for segment in self.saved[1] if segment.id == segment_id), None)
+
     def list_for_run(self, run_id: str) -> list[PersistenceCameraSegment]:
         if self.saved is None or self.saved[0] != run_id:
             return []
