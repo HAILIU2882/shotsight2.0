@@ -208,6 +208,7 @@ def test_segment_calibration_and_tracks(
     balls.replace_for_run(run.id, [ball])
 
     assert segments.list_for_run(run.id) == [stable]
+    assert segments.get(stable.id) == stable
     assert calibrations.list_for_segment(stable.id) == [automatic, corrected]
     assert calibrations.latest_for_segment(stable.id) == corrected
     assert players.list_for_run(run.id) == [tracked_player]
