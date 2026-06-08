@@ -1,0 +1,2 @@
+ALTER TABLE videos ADD COLUMN rotation_degrees INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE videos ADD COLUMN audio_codecs_json TEXT NOT NULL DEFAULT '[]';

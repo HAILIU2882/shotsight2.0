@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from shotsight2.domain.artifacts import (
@@ -69,6 +70,9 @@ class ArtifactStore(Protocol):
 
     def open_read(self, artifact_id: ArtifactId) -> AbstractContextManager[BinaryIO]:
         """Open a known artifact for streaming reads."""
+
+    def local_path(self, artifact_id: ArtifactId) -> AbstractContextManager[Path]:
+        """Yield a validated local path for a trusted local tool adapter."""
 
     def metadata(self, artifact_id: ArtifactId) -> ArtifactMetadata:
         """Return safe metadata for an existing artifact."""

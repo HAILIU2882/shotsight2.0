@@ -89,6 +89,8 @@ def test_temporary_resources_are_scoped_and_promoted_atomically(
     assert promoted.size_bytes == 11
     with store.open_read(destination) as stream:
         assert stream.read() == b"video-bytes"
+    with store.local_path(destination) as path:
+        assert path.read_bytes() == b"video-bytes"
     with pytest.raises(UnknownArtifactError):
         store.metadata(temporary_file)
 

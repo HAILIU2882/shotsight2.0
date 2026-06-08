@@ -153,7 +153,7 @@ def test_worker_cli_starts_independently_from_fastapi(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert database_path.exists()
     database = SQLiteDatabase(database_path)
-    assert database.schema_version() == 3
+    assert database.schema_version() == 4
     with database.read() as connection:
         worker = connection.execute(
             "SELECT stopped_at FROM worker_heartbeats WHERE worker_id = 'cli-worker'"
@@ -188,4 +188,4 @@ def test_worker_cli_wiring_and_handler_validation(tmp_path: Path) -> None:
         )
         == 0
     )
-    assert SQLiteDatabase(database_path).schema_version() == 3
+    assert SQLiteDatabase(database_path).schema_version() == 4
