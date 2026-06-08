@@ -13,6 +13,7 @@ from shotsight2.services.analysis_jobs import (
     VideoNotReadyError,
     WorkerLiveness,
 )
+from shotsight2.services.statistics import StatisticsService
 from shotsight2.services.video_ingestion import (
     IngestionDiagnostic,
     UploadVideoCommand,
@@ -69,6 +70,7 @@ __all__ = [
     "RunSummary",
     "ShootingSummary",
     "ShotTypeSummary",
+    "StatisticsService",
     "UploadVideoCommand",
     "UploadVideoResult",
     "VideoNotReadyError",

@@ -136,3 +136,13 @@ and baseline formatting before its module can pass the quality gate.
 - The service streams uploads into temporary artifact storage, enforces size,
   duration, and 4K limits, probes media before promotion, persists READY video
   metadata, and removes artifacts on rejection or persistence failure.
+
+### Statistics
+
+- Merged to `main` on 2026-06-08.
+- Independent focused coverage result: 100%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- The module calculates correction-aware totals, player breakdowns,
+  two/three-point summaries, review/low-confidence counts, and chart-ready
+  grouped shot data from effective attempts.
