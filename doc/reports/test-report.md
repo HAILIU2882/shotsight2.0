@@ -125,3 +125,14 @@ and baseline formatting before its module can pass the quality gate.
 - The service creates immutable analysis runs, enqueues identifier-only queue
   messages, enforces one active job, persists progress/errors, and implements
   retry/reanalysis as new full runs.
+
+### Video Ingestion
+
+- Merged to `main` on 2026-06-08 after updating against Analysis Job.
+- 114 tests passed in the integrated Video Ingestion branch.
+- Independent focused coverage result: 90.79%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- The service streams uploads into temporary artifact storage, enforces size,
+  duration, and 4K limits, probes media before promotion, persists READY video
+  metadata, and removes artifacts on rejection or persistence failure.

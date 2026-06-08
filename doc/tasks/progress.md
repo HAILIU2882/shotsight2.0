@@ -18,7 +18,7 @@
 
 ## Core Application
 
-- [ ] [Video Ingestion](video-ingestion.md)
+- [x] [Video Ingestion](video-ingestion.md)
 - [x] [Analysis Job](analysis-job.md)
 - [ ] [Video Library](video-library.md)
 - [ ] [Application API](application-api.md)
