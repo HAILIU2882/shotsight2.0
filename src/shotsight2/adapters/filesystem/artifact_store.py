@@ -184,6 +184,14 @@ class FileSystemArtifactStore:
         with path.open("rb") as stream:
             yield stream
 
+    @contextmanager
+    def local_path(self, artifact_id: ArtifactId) -> Iterator[Path]:
+        """Yield a validated path for trusted subprocess-based adapters."""
+        path = self._resolve(artifact_id, require_exists=True)
+        if not path.is_file():
+            raise UnknownArtifactError(f"Artifact is not a file: {artifact_id}")
+        yield path
+
     def metadata(self, artifact_id: ArtifactId) -> ArtifactMetadata:
         """Return safe metadata for an existing regular file."""
         parsed = self._parse(artifact_id)

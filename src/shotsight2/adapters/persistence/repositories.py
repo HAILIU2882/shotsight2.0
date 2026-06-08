@@ -94,6 +94,8 @@ def _video(row: sqlite3.Row) -> Video:
         container=_row_text(row, "container"),
         created_at=_datetime(_row_text(row, "created_at")),
         status=VideoStatus(_row_text(row, "status")),
+        rotation_degrees=int(row["rotation_degrees"]),
+        audio_codecs=tuple(cast(list[str], json.loads(_row_text(row, "audio_codecs_json")))),
     )
 
 
@@ -321,8 +323,8 @@ class SQLiteVideoRepository:
                 INSERT INTO videos(
                     id, filename, original_artifact_id, size_bytes,
                     duration_seconds, width, height, fps, codec, container,
-                    status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, created_at, rotation_degrees, audio_codecs_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     video.id,
@@ -337,6 +339,8 @@ class SQLiteVideoRepository:
                     video.container,
                     video.status.value,
                     _timestamp(video.created_at),
+                    video.rotation_degrees,
+                    _json(list(video.audio_codecs)),
                 ),
             )
 

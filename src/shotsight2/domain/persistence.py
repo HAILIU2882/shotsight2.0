@@ -84,6 +84,8 @@ class Video:
     container: str
     created_at: datetime
     status: VideoStatus = VideoStatus.READY
+    rotation_degrees: int = 0
+    audio_codecs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
