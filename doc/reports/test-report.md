@@ -107,3 +107,21 @@ and baseline formatting before its module can pass the quality gate.
   checks passed.
 - Review fix repaired strict typing for correlated log records and removed a
   migration whitespace violation before merge.
+
+### Worker Queue Heartbeat Fix
+
+- Merged to `main` on 2026-06-08.
+- 14 focused worker tests passed with 90.09% focused coverage.
+- Full integrated gates passed after merge.
+- Fix stops and joins the heartbeat thread before acknowledging or failing a
+  completed job, eliminating the observed unhandled thread warning.
+
+### Analysis Job
+
+- Merged to `main` on 2026-06-08.
+- Independent coverage result: 94.42%.
+- Full `mypy --strict`, Ruff lint, Ruff format, and `git diff --check`
+  checks passed.
+- The service creates immutable analysis runs, enqueues identifier-only queue
+  messages, enforces one active job, persists progress/errors, and implements
+  retry/reanalysis as new full runs.
