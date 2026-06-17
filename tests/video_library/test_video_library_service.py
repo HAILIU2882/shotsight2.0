@@ -476,6 +476,11 @@ class _PlayerRepository:
     def list_for_video(self, video_id: str) -> list[PlayerTrack]:
         return [player for player in self._players if player.video_id == video_id]
 
+    def rename_display_name(self, player_track_id: str, display_name: str) -> None:
+        del player_track_id, display_name
+        self.write_calls += 1
+        raise AssertionError("video library queries must not rename players")
+
 
 def _video(
     video_id: str,

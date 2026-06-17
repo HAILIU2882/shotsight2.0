@@ -30,7 +30,7 @@
 - [x] [Camera Segment](camera-segment.md)
 - [x] [Calibration](calibration.md)
 - [ ] [Tracking](tracking.md)
-- [ ] [Track Association](track-association.md)
+- [x] [Track Association](track-association.md)
 - [ ] [Shot Lifecycle](shot-lifecycle.md)
 - [ ] [Outcome Classification](outcome-classification.md)
 - [x] [Court Mapping](court-mapping.md)

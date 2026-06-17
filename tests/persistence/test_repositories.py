@@ -11,6 +11,7 @@ import pytest
 from shotsight2.adapters.persistence import (
     SQLiteAnalysisRunRepository,
     SQLiteArtifactRepository,
+    SQLiteAssociationEvidenceRepository,
     SQLiteBallTrackRepository,
     SQLiteCalibrationRepository,
     SQLiteCameraSegmentRepository,
@@ -27,6 +28,8 @@ from shotsight2.domain import (
     AnalysisRun,
     AnalysisStage,
     Artifact,
+    AssociationEvidenceKind,
+    AssociationEvidenceReference,
     BallTrack,
     Calibration,
     CameraSegment,
@@ -100,6 +103,21 @@ def artifact(run_id: str = "run-1", artifact_id: str = "replay-1") -> Artifact:
         "render-v1",
         10_000,
         NOW,
+    )
+
+
+def evidence(attempt_id: str = "attempt-1", evidence_id: str = "evidence-1") -> AssociationEvidenceReference:
+    """Create one shot-attribution evidence reference."""
+    return AssociationEvidenceReference(
+        evidence_id,
+        "run-1",
+        attempt_id,
+        AssociationEvidenceKind.SHOOTER,
+        "player-1",
+        ("ball-150", "player-150"),
+        0.84,
+        False,
+        "Possession immediately preceded release.",
     )
 
 
@@ -215,6 +233,12 @@ def test_segment_calibration_and_tracks(
     assert players.list_for_video(video.id) == [tracked_player]
     assert balls.list_for_run(run.id) == [ball]
 
+    players.rename_display_name(tracked_player.id, "Alice")
+    renamed = players.list_for_run(run.id)[0]
+    assert renamed.id == tracked_player.id
+    assert renamed.local_label == tracked_player.local_label
+    assert renamed.display_name == "Alice"
+
     replacement = replace(stable, id="segment-2", start_seconds=2.0)
     segments.replace_for_run(run.id, [replacement])
     assert balls.list_for_run(run.id) == []
@@ -259,6 +283,35 @@ def test_effective_attempts_keep_automatic_evidence(
 
     corrections.delete("c1")
     assert attempts.list_effective(video.id)[0].outcome is ShotOutcome.MISSED
+
+
+def test_association_evidence_references_round_trip_and_replace(
+    database: SQLiteDatabase,
+    video: Video,
+    run: AnalysisRun,
+) -> None:
+    """Shot attribution evidence references should remain queryable for review."""
+    seed_run(database, video, run)
+    SQLitePlayerTrackRepository(database).replace_for_run(run.id, [player()])
+    SQLiteShotAttemptRepository(database).replace_automatic_results(run.id, [attempt()], [location()])
+    repository = SQLiteAssociationEvidenceRepository(database)
+    first = evidence()
+    replacement = replace(
+        first,
+        id="evidence-2",
+        player_track_id=None,
+        confidence=0.52,
+        ambiguous=True,
+        reason="Two players were plausible at release.",
+    )
+
+    repository.replace_for_attempt("attempt-1", [first])
+    assert repository.list_for_attempt("attempt-1") == [first]
+    assert repository.list_for_run(run.id) == [first]
+
+    repository.replace_for_attempt("attempt-1", [replacement])
+
+    assert repository.list_for_attempt("attempt-1") == [replacement]
 
 
 def test_court_mapping_atomically_refreshes_location_and_shot_type(
