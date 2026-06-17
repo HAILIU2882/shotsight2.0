@@ -30,6 +30,12 @@ from shotsight2.services.court_mapping import (
     ReleaseObservationProvider,
 )
 from shotsight2.services.deletion import ActiveVideoAnalysisError, DeletionError, VideoDeletionService
+from shotsight2.services.shot_lifecycle import (
+    ShotLifecycleConfig,
+    ShotLifecycleResult,
+    ShotLifecycleService,
+    rim_geometry,
+)
 from shotsight2.services.statistics import StatisticsService
 from shotsight2.services.video_ingestion import (
     IngestionDiagnostic,
@@ -101,6 +107,9 @@ __all__ = [
     "RunSummary",
     "ShootingSummary",
     "ShotTypeSummary",
+    "ShotLifecycleConfig",
+    "ShotLifecycleResult",
+    "ShotLifecycleService",
     "StatisticsService",
     "UploadVideoCommand",
     "UploadVideoResult",
@@ -116,4 +125,5 @@ __all__ = [
     "VideoLibraryService",
     "VideoStorageSummary",
     "WorkerLiveness",
+    "rim_geometry",
 ]

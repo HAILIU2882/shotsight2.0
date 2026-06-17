@@ -234,3 +234,23 @@ and baseline formatting before its module can pass the quality gate.
 - Tests cover single player, multiple players, handoff, occlusion, crossing
   players, camera change, ambiguous release, persistence, and migration
   behavior.
+
+### Shot Lifecycle
+
+- Partially completed in `codex/shot-lifecycle` on 2026-06-18.
+- 191 tests passed with integrated coverage of 91.98%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed.
+- The module defines lifecycle states, events, evidence, confidence, terminal
+  lifecycle types, ignored release candidates, and ShotAttempt-compatible
+  automatic candidates that defer make/miss outcome classification.
+- The service consumes stable camera segments, possession frames, ball/rim
+  observations, and calibration rim geometry to detect release, free flight,
+  immediate blocks, rim interactions, air balls, and bounded uncertainty without
+  crossing unstable camera ranges or duplicating one release lifecycle.
+- Deterministic tests cover jump shots, layups, dunks, hooks, free throws,
+  blocked shots, air balls, passes, pump fakes, incomplete tracks, duplicate
+  rim observations, and unstable camera ranges.
+- `scripts/evaluate_shot_lifecycle.py` provides the precision/recall comparison
+  interface, but benchmark metrics are blocked because no ground-truth
+  shot-event annotation file exists.
