@@ -4,6 +4,7 @@ from shotsight2.adapters.persistence.database import SQLiteDatabase
 from shotsight2.adapters.persistence.repositories import (
     SQLiteAnalysisRunRepository,
     SQLiteArtifactRepository,
+    SQLiteAssociationEvidenceRepository,
     SQLiteBallTrackRepository,
     SQLiteCalibrationRepository,
     SQLiteCameraSegmentRepository,
@@ -21,6 +22,7 @@ from shotsight2.adapters.persistence.repositories import (
 
 __all__ = [
     "SQLiteAnalysisRunRepository",
+    "SQLiteAssociationEvidenceRepository",
     "SQLiteArtifactRepository",
     "SQLiteBallTrackRepository",
     "SQLiteCalibrationRepository",

@@ -15,6 +15,8 @@ from shotsight2.domain import (
     AnalysisRun,
     AnalysisStage,
     Artifact,
+    AssociationEvidenceKind,
+    AssociationEvidenceReference,
     BackupMetadata,
     BallTrack,
     Calibration,
@@ -253,6 +255,20 @@ def _artifact(row: sqlite3.Row) -> Artifact:
         version=_row_text(row, "version"),
         size_bytes=int(row["size_bytes"]),
         created_at=_datetime(_row_text(row, "created_at")),
+    )
+
+
+def _association_evidence(row: sqlite3.Row) -> AssociationEvidenceReference:
+    return AssociationEvidenceReference(
+        id=_row_text(row, "id"),
+        analysis_run_id=_row_text(row, "analysis_run_id"),
+        shot_attempt_id=_row_text(row, "shot_attempt_id"),
+        kind=AssociationEvidenceKind(_row_text(row, "kind")),
+        player_track_id=cast(str | None, row["player_track_id"]),
+        observation_ids=tuple(cast(list[str], json.loads(_row_text(row, "observation_ids_json")))),
+        confidence=float(row["confidence"]),
+        ambiguous=bool(row["ambiguous"]),
+        reason=_row_text(row, "reason"),
     )
 
 
@@ -832,6 +848,16 @@ class SQLitePlayerTrackRepository:
             ).fetchall()
             return [_player(row) for row in rows]
 
+    def rename_display_name(self, player_track_id: str, display_name: str) -> None:
+        """Rename a player without changing the stable track identifier."""
+        with self._database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE player_tracks SET display_name = ? WHERE id = ?",
+                (display_name, player_track_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(player_track_id)
+
 
 class SQLiteBallTrackRepository:
     """SQLite implementation for ball-track metadata."""
@@ -1259,6 +1285,75 @@ class SQLiteShotAttemptRepository:
             location=location,
             removed=removed,
         )
+
+
+class SQLiteAssociationEvidenceRepository:
+    """SQLite persistence for shot-attribution evidence references."""
+
+    def __init__(self, database: SQLiteDatabase) -> None:
+        self._database = database
+
+    def replace_for_attempt(
+        self,
+        shot_attempt_id: str,
+        references: Sequence[AssociationEvidenceReference],
+    ) -> None:
+        """Atomically replace evidence references for one shot attempt."""
+        if any(reference.shot_attempt_id != shot_attempt_id for reference in references):
+            raise ValueError("All evidence references must belong to the requested shot attempt")
+        with self._database.transaction() as connection:
+            connection.execute(
+                "DELETE FROM association_evidence_references WHERE shot_attempt_id = ?",
+                (shot_attempt_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO association_evidence_references(
+                    id, analysis_run_id, shot_attempt_id, kind, player_track_id,
+                    observation_ids_json, confidence, ambiguous, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        item.id,
+                        item.analysis_run_id,
+                        item.shot_attempt_id,
+                        item.kind.value,
+                        item.player_track_id,
+                        _json(list(item.observation_ids)),
+                        item.confidence,
+                        int(item.ambiguous),
+                        item.reason,
+                    )
+                    for item in references
+                ],
+            )
+
+    def list_for_attempt(self, shot_attempt_id: str) -> list[AssociationEvidenceReference]:
+        """List evidence references for one shot in deterministic order."""
+        with self._database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM association_evidence_references
+                WHERE shot_attempt_id = ?
+                ORDER BY kind, id
+                """,
+                (shot_attempt_id,),
+            ).fetchall()
+            return [_association_evidence(row) for row in rows]
+
+    def list_for_run(self, run_id: str) -> list[AssociationEvidenceReference]:
+        """List evidence references for one analysis run."""
+        with self._database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM association_evidence_references
+                WHERE analysis_run_id = ?
+                ORDER BY shot_attempt_id, kind, id
+                """,
+                (run_id,),
+            ).fetchall()
+            return [_association_evidence(row) for row in rows]
 
 
 class SQLiteArtifactRepository:

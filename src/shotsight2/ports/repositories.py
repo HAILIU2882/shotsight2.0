@@ -10,6 +10,7 @@ from shotsight2.domain import (
     AnalysisRun,
     AnalysisStage,
     Artifact,
+    AssociationEvidenceReference,
     BackupMetadata,
     BallTrack,
     Calibration,
@@ -93,6 +94,7 @@ class PlayerTrackRepository(Protocol):
     def replace_for_run(self, run_id: str, tracks: Sequence[PlayerTrack]) -> None: ...
     def list_for_run(self, run_id: str) -> list[PlayerTrack]: ...
     def list_for_video(self, video_id: str) -> list[PlayerTrack]: ...
+    def rename_display_name(self, player_track_id: str, display_name: str) -> None: ...
 
 
 class BallTrackRepository(Protocol):
@@ -113,6 +115,18 @@ class ShotAttemptRepository(Protocol):
     ) -> None: ...
     def list_for_run(self, run_id: str) -> list[ShotAttempt]: ...
     def list_effective(self, video_id: str) -> list[EffectiveShotAttempt]: ...
+
+
+class AssociationEvidenceRepository(Protocol):
+    """Persist reviewable evidence references for shot attribution."""
+
+    def replace_for_attempt(
+        self,
+        shot_attempt_id: str,
+        references: Sequence[AssociationEvidenceReference],
+    ) -> None: ...
+    def list_for_attempt(self, shot_attempt_id: str) -> list[AssociationEvidenceReference]: ...
+    def list_for_run(self, run_id: str) -> list[AssociationEvidenceReference]: ...
 
 
 class CourtMappingAttemptRepository(Protocol):

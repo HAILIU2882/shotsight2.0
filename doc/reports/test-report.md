@@ -219,3 +219,18 @@ and baseline formatting before its module can pass the quality gate.
 - Blocked validation remains for real MLX SAM 3 Image execution and MLX
   inter-frame benchmarking because optional packages `mlx_sam3` and `sam3` are
   not installed and no authorized local runtime bridge or weights are present.
+
+### Track Association
+
+- Completed in `codex/track-association` on 2026-06-17.
+- 180 tests passed with integrated coverage of 92.08%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed.
+- The module defines video-local player identities, association confidence,
+  deterministic `Player N` labels, adjacent-frame and compatible camera-segment
+  links, possession candidates with short-gap carry, shooter attribution at
+  release, explicit ambiguity flags, display-name renaming that preserves track
+  IDs, and persisted shot-attribution evidence references.
+- Tests cover single player, multiple players, handoff, occlusion, crossing
+  players, camera change, ambiguous release, persistence, and migration
+  behavior.
