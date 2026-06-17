@@ -14,6 +14,8 @@ from shotsight2.adapters.persistence.repositories import (
     SQLiteReviewCorrectionRepository,
     SQLiteShotAttemptRepository,
     SQLiteShotLocationRepository,
+    SQLiteTrackingObservationRepository,
+    SQLiteTrackingPromptRepository,
     SQLiteVideoRepository,
 )
 
@@ -31,5 +33,7 @@ __all__ = [
     "SQLiteReviewCorrectionRepository",
     "SQLiteShotAttemptRepository",
     "SQLiteShotLocationRepository",
+    "SQLiteTrackingObservationRepository",
+    "SQLiteTrackingPromptRepository",
     "SQLiteVideoRepository",
 ]

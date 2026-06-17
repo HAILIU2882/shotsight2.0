@@ -33,6 +33,18 @@ from shotsight2.domain import (
 )
 from shotsight2.domain.deletion import DeletionRecordCounts
 from shotsight2.domain.persistence import JsonObject, JsonValue
+from shotsight2.domain.tracking import (
+    BoundingBox,
+    ImagePoint,
+    MaskReference,
+    ObservationProvenance,
+    PromptKind,
+    PromptSource,
+    TrackedObjectClass,
+    TrackingPrompt,
+    TrackObservation,
+    VisibilityState,
+)
 
 
 def _timestamp(value: datetime) -> str:
@@ -74,6 +86,14 @@ def _json_object(value: str) -> JsonObject:
     if not isinstance(decoded, dict):
         raise ValueError("Expected a JSON object")
     return decoded
+
+
+def _json_number(value: JsonValue) -> float:
+    """Read a numeric JSON field without accepting booleans or containers."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Expected a JSON number")
+    return float(value)
 
 
 def _row_text(row: sqlite3.Row, key: str) -> str:
@@ -233,6 +253,84 @@ def _artifact(row: sqlite3.Row) -> Artifact:
         version=_row_text(row, "version"),
         size_bytes=int(row["size_bytes"]),
         created_at=_datetime(_row_text(row, "created_at")),
+    )
+
+
+def _tracking_prompt(row: sqlite3.Row) -> TrackingPrompt:
+    geometry_value = cast(str | None, row["geometry_json"])
+    geometry = {} if geometry_value is None else _json_object(geometry_value)
+    point = (
+        ImagePoint(_json_number(geometry["x"]), _json_number(geometry["y"]))
+        if _row_text(row, "kind") == PromptKind.POINT.value
+        else None
+    )
+    box = (
+        BoundingBox(
+            _json_number(geometry["x"]),
+            _json_number(geometry["y"]),
+            _json_number(geometry["width"]),
+            _json_number(geometry["height"]),
+        )
+        if _row_text(row, "kind") == PromptKind.BOX.value
+        else None
+    )
+    mask_artifact_id = cast(str | None, row["mask_artifact_id"])
+    mask_frame_index = cast(int | None, row["mask_frame_index"])
+    mask = (
+        MaskReference(mask_artifact_id, mask_frame_index)
+        if mask_artifact_id is not None and mask_frame_index is not None
+        else None
+    )
+    return TrackingPrompt(
+        id=_row_text(row, "id"),
+        segment_id=_row_text(row, "segment_id"),
+        timestamp_seconds=float(row["timestamp_seconds"]),
+        object_class=TrackedObjectClass(_row_text(row, "object_class")),
+        kind=PromptKind(_row_text(row, "kind")),
+        source=PromptSource(_row_text(row, "source")),
+        point=point,
+        box=box,
+        mask=mask,
+        target_track_id=cast(str | None, row["target_track_id"]),
+        text=cast(str | None, row["text_value"]),
+    )
+
+
+def _tracking_observation(row: sqlite3.Row) -> TrackObservation:
+    box = _json_object(_row_text(row, "bounding_box_json"))
+    centroid = _json_object(_row_text(row, "centroid_json"))
+    mask_artifact_id = cast(str | None, row["mask_artifact_id"])
+    mask_frame_index = cast(int | None, row["mask_frame_index"])
+    return TrackObservation(
+        id=_row_text(row, "id"),
+        segment_id=_row_text(row, "segment_id"),
+        frame_index=int(row["frame_index"]),
+        timestamp_seconds=float(row["timestamp_seconds"]),
+        object_class=TrackedObjectClass(_row_text(row, "object_class")),
+        local_track_id=_row_text(row, "local_track_id"),
+        bounding_box=BoundingBox(
+            _json_number(box["x"]),
+            _json_number(box["y"]),
+            _json_number(box["width"]),
+            _json_number(box["height"]),
+        ),
+        centroid=ImagePoint(_json_number(centroid["x"]), _json_number(centroid["y"])),
+        confidence=float(row["confidence"]),
+        visibility=VisibilityState(_row_text(row, "visibility")),
+        occluded=bool(row["occluded"]),
+        mask=(
+            MaskReference(mask_artifact_id, mask_frame_index)
+            if mask_artifact_id is not None and mask_frame_index is not None
+            else None
+        ),
+        provenance=ObservationProvenance(
+            backend_name=_row_text(row, "backend_name"),
+            backend_version=cast(str | None, row["backend_version"]),
+            model=cast(str | None, row["model"]),
+            session_id=_row_text(row, "session_id"),
+            prompt_id=cast(str | None, row["prompt_id"]),
+            reinitialized=bool(row["reinitialized"]),
+        ),
     )
 
 
@@ -796,6 +894,159 @@ class SQLiteBallTrackRepository:
                 (run_id,),
             ).fetchall()
             return [_ball(row) for row in rows]
+
+
+class SQLiteTrackingPromptRepository:
+    """SQLite persistence for automatic and user repair prompts."""
+
+    def __init__(self, database: SQLiteDatabase) -> None:
+        self._database = database
+
+    def add(self, prompt: TrackingPrompt) -> None:
+        """Insert one immutable prompt."""
+
+        geometry: JsonObject | None = None
+        if prompt.point is not None:
+            geometry = {"x": prompt.point.x, "y": prompt.point.y}
+        elif prompt.box is not None:
+            geometry = {
+                "x": prompt.box.x,
+                "y": prompt.box.y,
+                "width": prompt.box.width,
+                "height": prompt.box.height,
+            }
+        with self._database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO tracking_prompts(
+                    id, segment_id, timestamp_seconds, object_class, kind,
+                    source, target_track_id, text_value, geometry_json,
+                    mask_artifact_id, mask_frame_index
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    prompt.id,
+                    prompt.segment_id,
+                    prompt.timestamp_seconds,
+                    prompt.object_class.value,
+                    prompt.kind.value,
+                    prompt.source.value,
+                    prompt.target_track_id,
+                    prompt.text,
+                    None if geometry is None else _json(geometry),
+                    None if prompt.mask is None else prompt.mask.artifact_id,
+                    None if prompt.mask is None else prompt.mask.frame_index,
+                ),
+            )
+
+    def list_for_segment(self, segment_id: str) -> list[TrackingPrompt]:
+        """List prompts in timeline order."""
+
+        with self._database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM tracking_prompts
+                WHERE segment_id = ?
+                ORDER BY timestamp_seconds, id
+                """,
+                (segment_id,),
+            ).fetchall()
+            return [_tracking_prompt(row) for row in rows]
+
+
+class SQLiteTrackingObservationRepository:
+    """SQLite persistence for structured tracking evidence."""
+
+    def __init__(self, database: SQLiteDatabase) -> None:
+        self._database = database
+
+    def replace_for_segment(
+        self,
+        segment_id: str,
+        observations: Sequence[TrackObservation],
+    ) -> None:
+        """Atomically replace observations for one stable segment."""
+
+        if any(item.segment_id != segment_id for item in observations):
+            raise ValueError("All observations must belong to the requested segment")
+        with self._database.transaction() as connection:
+            connection.execute("DELETE FROM tracking_observations WHERE segment_id = ?", (segment_id,))
+            connection.executemany(
+                """
+                INSERT INTO tracking_observations(
+                    id, segment_id, frame_index, timestamp_seconds, object_class,
+                    local_track_id, bounding_box_json, centroid_json, confidence,
+                    visibility, occluded, mask_artifact_id, mask_frame_index,
+                    backend_name, backend_version, model, session_id, prompt_id,
+                    reinitialized
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        item.id,
+                        item.segment_id,
+                        item.frame_index,
+                        item.timestamp_seconds,
+                        item.object_class.value,
+                        item.local_track_id,
+                        _json(
+                            {
+                                "x": item.bounding_box.x,
+                                "y": item.bounding_box.y,
+                                "width": item.bounding_box.width,
+                                "height": item.bounding_box.height,
+                            }
+                        ),
+                        _json({"x": item.centroid.x, "y": item.centroid.y}),
+                        item.confidence,
+                        item.visibility.value,
+                        int(item.occluded),
+                        None if item.mask is None else item.mask.artifact_id,
+                        None if item.mask is None else item.mask.frame_index,
+                        item.provenance.backend_name,
+                        item.provenance.backend_version,
+                        item.provenance.model,
+                        item.provenance.session_id,
+                        item.provenance.prompt_id,
+                        int(item.provenance.reinitialized),
+                    )
+                    for item in observations
+                ],
+            )
+
+    def list_for_segment(self, segment_id: str) -> list[TrackObservation]:
+        """List observations in deterministic frame and identity order."""
+
+        with self._database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM tracking_observations
+                WHERE segment_id = ?
+                ORDER BY frame_index, object_class, local_track_id
+                """,
+                (segment_id,),
+            ).fetchall()
+            return [_tracking_observation(row) for row in rows]
+
+    def list_for_run(self, run_id: str) -> list[TrackObservation]:
+        """List observations across all stable segments in a run."""
+
+        with self._database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT tracking_observations.*
+                FROM tracking_observations
+                JOIN camera_segments
+                  ON camera_segments.id = tracking_observations.segment_id
+                WHERE camera_segments.analysis_run_id = ?
+                ORDER BY camera_segments.start_seconds,
+                         tracking_observations.frame_index,
+                         tracking_observations.object_class,
+                         tracking_observations.local_track_id
+                """,
+                (run_id,),
+            ).fetchall()
+            return [_tracking_observation(row) for row in rows]
 
 
 class SQLiteShotLocationRepository:

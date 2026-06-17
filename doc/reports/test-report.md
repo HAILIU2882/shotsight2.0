@@ -192,3 +192,30 @@ and baseline formatting before its module can pass the quality gate.
   positions, classifies NBA two/three geometry including corner lines, provides
   indicative fallback positions, and recalculates derived locations after
   calibration or shooter changes.
+
+### Tracking
+
+- Partially completed in `codex/tracking` on 2026-06-17.
+- 171 tests passed with integrated coverage of 91.81%.
+- Full strict mypy, Ruff lint, Ruff format, and coverage gates passed.
+- The module defines backend-neutral tracking prompts, frame batches, sessions,
+  observations, provenance, visibility states, quality events, and metrics.
+- It adds reusable backend contract tests, segment-scoped orchestration,
+  automatic basketball/player/rim prompts, saved user point/box repair prompts,
+  SQLite persistence for prompts and observations, OpenCV fallback tracking,
+  and lazy optional boundaries for MLX SAM 3 Image and official SAM 3.1 video.
+- OpenCV fallback representative-video evaluation used
+  `/Users/hailiu/Desktop/bball_pt2.mov` for the first 30.0 seconds at 10 FPS:
+  - Elapsed time: 0.547 seconds.
+  - Processing FPS: 548.33.
+  - Ball track coverage: 1.0.
+  - Reinitializations: 0.
+  - Identity switches: 0.
+  - Lost events: 0.
+  - Occlusion events: 0.
+  - Observation counts: basketball 300, rim 300, player 0.
+  - Ground truth was unavailable, so these metrics validate runnable processing
+    and reporting, not real-world tracking accuracy.
+- Blocked validation remains for real MLX SAM 3 Image execution and MLX
+  inter-frame benchmarking because optional packages `mlx_sam3` and `sam3` are
+  not installed and no authorized local runtime bridge or weights are present.
