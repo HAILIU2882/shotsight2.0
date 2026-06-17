@@ -19,3 +19,20 @@
 - **Unblock condition:** Install a supported MLX SAM 3 Image runtime that
   exposes the ShotSight runtime bridge, provide authorized local weights, then
   run the MLX benchmark against `/Users/hailiu/Desktop/bball_pt2.mov`.
+
+## Shot Lifecycle Precision/Recall Benchmark
+
+- **Date:** 2026-06-18
+- **Module:** Shot Lifecycle
+- **Blocked item:** `SHT-014`
+- **Status:** Benchmark comparison interface implemented; precision/recall
+  metrics are blocked.
+- **Reason:** No ground-truth shot-event annotation file exists in the
+  repository or documented local fixtures.
+- **Verified with:** `scripts/evaluate_shot_lifecycle.py` reports
+  `status: blocked` when annotations and predictions are not supplied.
+- **Impact:** Deterministic lifecycle state-machine scenarios are tested, but
+  real-video release-event precision and recall are not claimed.
+- **Unblock condition:** Add an authorized annotation file containing expected
+  shot release timestamps, generate lifecycle predictions for the same source,
+  then run `scripts/evaluate_shot_lifecycle.py --annotations ... --predictions ...`.
