@@ -238,6 +238,7 @@ and baseline formatting before its module can pass the quality gate.
 ### Shot Lifecycle
 
 - Partially completed in `codex/shot-lifecycle` on 2026-06-18.
+
 - 191 tests passed with integrated coverage of 91.98%.
 - Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
   gates passed.
@@ -272,3 +273,20 @@ and baseline formatting before its module can pass the quality gate.
   and uncertainty calibration comparison interface, but benchmark metrics are
   blocked because no ground-truth outcome label file and matching prediction
   file exist.
+
+### Artifact Rendering
+
+- Completed in `codex/artifact-rendering` on 2026-06-19.
+- 216 tests passed with integrated coverage of 91.25%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed.
+- The module defines rendering artifact kinds, reproducible render
+  configuration/version identifiers, localized English/Chinese overlay labels,
+  overlay primitives and states, bounded replay windows, full annotated-video
+  rendering through the media adapter boundary, deterministic shot-chart and
+  heatmap JSON/SVG outputs, artifact-store temporary staging and promotion,
+  cleanup on encode failure, metadata artifacts, and deterministic SVG overlay
+  frame regression fixtures.
+- True real-video visual-regression comparison against approved ground-truth
+  snapshots remains blocked; deterministic overlay-frame regression is covered
+  by unit tests.
