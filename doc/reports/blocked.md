@@ -36,3 +36,23 @@
 - **Unblock condition:** Add an authorized annotation file containing expected
   shot release timestamps, generate lifecycle predictions for the same source,
   then run `scripts/evaluate_shot_lifecycle.py --annotations ... --predictions ...`.
+
+## Outcome Classification Accuracy and Calibration Benchmark
+
+- **Date:** 2026-06-18
+- **Module:** Outcome Classification
+- **Blocked item:** `OUT-010`
+- **Status:** Benchmark comparison interface implemented; make/miss accuracy
+  and uncertainty calibration metrics are blocked.
+- **Reason:** No ground-truth make/miss outcome label file and matching
+  automatic prediction file exist in the repository or documented local
+  fixtures.
+- **Verified with:** `scripts/evaluate_outcome_classification.py` reports
+  `status: blocked` when labels and predictions are not supplied, and repository
+  search found no outcome label fixture.
+- **Impact:** Deterministic outcome classification scenarios are tested, but
+  real-video make/miss accuracy and confidence calibration are not claimed.
+- **Unblock condition:** Add an authorized label file containing expected
+  `MADE`/`MISSED` outcomes and generated automatic predictions for the same
+  attempt IDs, then run
+  `scripts/evaluate_outcome_classification.py --labels ... --predictions ...`.

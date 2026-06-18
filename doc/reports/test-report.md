@@ -254,3 +254,21 @@ and baseline formatting before its module can pass the quality gate.
 - `scripts/evaluate_shot_lifecycle.py` provides the precision/recall comparison
   interface, but benchmark metrics are blocked because no ground-truth
   shot-event annotation file exists.
+
+### Outcome Classification
+
+- Partially completed in `codex/outcome-classification` on 2026-06-18.
+- 202 tests passed with integrated coverage of 91.90%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed.
+- The module defines automatic outcome evidence, component confidence, and a
+  calibrated image-space rim crossing volume, then classifies lifecycle
+  candidates into made, missed, or uncertain attempts without moving make/miss
+  logic into Shot Lifecycle.
+- Deterministic tests cover swish, rim make, backboard make, rim miss,
+  backboard miss, air ball, blocked shot, occluded rim evidence, tracking loss,
+  and review override independence between automatic and effective outcomes.
+- `scripts/evaluate_outcome_classification.py` provides the make/miss accuracy
+  and uncertainty calibration comparison interface, but benchmark metrics are
+  blocked because no ground-truth outcome label file and matching prediction
+  file exist.

@@ -30,6 +30,11 @@ from shotsight2.services.court_mapping import (
     ReleaseObservationProvider,
 )
 from shotsight2.services.deletion import ActiveVideoAnalysisError, DeletionError, VideoDeletionService
+from shotsight2.services.outcome_classification import (
+    OutcomeClassificationConfig,
+    OutcomeClassificationResult,
+    OutcomeClassificationService,
+)
 from shotsight2.services.shot_lifecycle import (
     ShotLifecycleConfig,
     ShotLifecycleResult,
@@ -100,6 +105,9 @@ __all__ = [
     "LocationSource",
     "ManualLocation",
     "MappingResult",
+    "OutcomeClassificationConfig",
+    "OutcomeClassificationResult",
+    "OutcomeClassificationService",
     "PlayerSummary",
     "PresentationCalibrationModel",
     "ReviewSummary",
