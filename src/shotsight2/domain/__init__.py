@@ -39,6 +39,14 @@ from shotsight2.domain.homography import (
     validate_homography,
 )
 from shotsight2.domain.jobs import ClaimedJob, QueueMessage
+from shotsight2.domain.outcome import (
+    OutcomeClassification,
+    OutcomeConfidence,
+    OutcomeEvidence,
+    OutcomeEvidenceKind,
+    RimCrossingVolume,
+    RimVolumeSource,
+)
 from shotsight2.domain.persistence import (
     AnalysisJob,
     AnalysisRun,
@@ -172,6 +180,10 @@ __all__ = [
     "NBACourtReferencePoint",
     "NormalizedCourtCoordinate",
     "ObservationProvenance",
+    "OutcomeClassification",
+    "OutcomeConfidence",
+    "OutcomeEvidence",
+    "OutcomeEvidenceKind",
     "PlayerTrack",
     "PlayerShotSummary",
     "PlayerObservationLink",
@@ -186,6 +198,8 @@ __all__ = [
     "ReviewStatusSummary",
     "ReleasePlayerObservation",
     "RimGeometry",
+    "RimCrossingVolume",
+    "RimVolumeSource",
     "RunStatus",
     "ShotAttempt",
     "ShotAttemptCandidate",
