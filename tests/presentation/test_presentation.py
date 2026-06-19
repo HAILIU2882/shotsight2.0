@@ -43,6 +43,7 @@ from shotsight2.presentation.i18n import DEFAULT_LOCALE, SUPPORTED_LOCALES, get_
 from shotsight2.services.analysis_jobs import AnalysisJobSnapshot, VideoNotReadyError
 from shotsight2.services.calibration import PresentationCalibrationModel
 from shotsight2.services.video_ingestion import (
+    UploadVideoCommand,
     UploadVideoResult,
     VideoIngestionError,
     VideoIngestionErrorCode,
@@ -483,6 +484,10 @@ class TestUploadPage:
         )
         assert resp.status_code == 303
         assert "/videos/v1" in resp.headers["location"]
+        command = ingestion_svc.ingest.call_args.args[0]
+        assert isinstance(command, UploadVideoCommand)
+        assert command.chunks is None
+        assert command.stream is not None
 
     def test_ingestion_error_shows_form_error(self, client: TestClient, ingestion_svc: MagicMock) -> None:
         ingestion_svc.ingest.side_effect = VideoIngestionError(VideoIngestionErrorCode.SIZE_LIMIT_EXCEEDED, "Too large")

@@ -128,6 +128,13 @@ and baseline formatting before its module can pass the quality gate.
 
 ### Video Ingestion
 
+- Revalidated on 2026-06-20 after replacing whole-file multipart reads in the
+  API and presentation routes with direct file-stream ingestion.
+- Regression tests prove the service uses configured bounded read sizes and
+  removes temporary artifacts without creating database rows when a file
+  stream exceeds the limit or is interrupted.
+- Full validation passed with 449 tests and 91.84% coverage; strict mypy over
+  149 files, Ruff lint, and Ruff format checks also passed.
 - Merged to `main` on 2026-06-08 after updating against Analysis Job.
 - 114 tests passed in the integrated Video Ingestion branch.
 - Independent focused coverage result: 90.79%.

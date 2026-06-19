@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import shutil
 import subprocess
 from collections.abc import Iterable, Iterator
@@ -151,6 +152,69 @@ def test_size_limit_stops_stream_and_removes_temporary_files(store: FileSystemAr
     assert stream.yielded == 2
     assert repository.videos == []
     assert _stored_files(store, "video-too-large") == []
+
+
+def test_file_stream_is_read_only_in_configured_bounded_chunks(store: FileSystemArtifactStore) -> None:
+    """File-backed uploads never request the entire multipart payload at once."""
+    repository = _MemoryVideoRepository()
+    stream = _RecordingFile(b"12345678")
+    service = VideoIngestionService(
+        media_tool=_FakeMediaTool(_metadata(Path("source.mp4"), size_bytes=8)),
+        video_repository=repository,
+        artifact_store=store,
+        limits=VideoIngestionLimits(chunk_size_hint=3),
+        id_factory=lambda: "bounded-file",
+        clock=lambda: NOW,
+    )
+
+    result = service.ingest(UploadVideoCommand("source.mp4", stream=stream))
+
+    assert result.bytes_written == 8
+    assert stream.read_sizes == [3, 3, 3, 3]
+    assert len(repository.videos) == 1
+
+
+def test_oversized_file_stream_leaves_no_artifact_or_database_row(store: FileSystemArtifactStore) -> None:
+    """A file stream crossing the byte cap is rolled back before probing."""
+    repository = _MemoryVideoRepository()
+    stream = _RecordingFile(b"123456")
+    service = VideoIngestionService(
+        media_tool=_FakeMediaTool(_metadata(Path("never-probed"), size_bytes=1)),
+        video_repository=repository,
+        artifact_store=store,
+        limits=VideoIngestionLimits(max_upload_bytes=5, chunk_size_hint=3),
+        id_factory=lambda: "oversized-file",
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(VideoIngestionError) as captured:
+        service.ingest(UploadVideoCommand("huge.mp4", stream=stream))
+
+    assert captured.value.code is VideoIngestionErrorCode.SIZE_LIMIT_EXCEEDED
+    assert stream.read_sizes == [3, 3]
+    assert repository.videos == []
+    assert _stored_files(store, "video-oversized-file") == []
+
+
+def test_interrupted_file_stream_leaves_no_artifact_or_database_row(store: FileSystemArtifactStore) -> None:
+    """A multipart-file read failure removes every partially written byte."""
+    repository = _MemoryVideoRepository()
+    stream = _InterruptedFile(b"partial-content")
+    service = VideoIngestionService(
+        media_tool=_FakeMediaTool(_metadata(Path("never-probed"), size_bytes=1)),
+        video_repository=repository,
+        artifact_store=store,
+        limits=VideoIngestionLimits(chunk_size_hint=7),
+        id_factory=lambda: "interrupted-file",
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(VideoIngestionError) as captured:
+        service.ingest(UploadVideoCommand("source.mp4", stream=stream))
+
+    assert captured.value.code is VideoIngestionErrorCode.STREAM_INTERRUPTED
+    assert repository.videos == []
+    assert _stored_files(store, "video-interrupted-file") == []
 
 
 @pytest.mark.parametrize(
@@ -415,6 +479,30 @@ class _CountingStream:
         for chunk in self._chunks:
             self.yielded += 1
             yield chunk
+
+
+class _RecordingFile(io.BytesIO):
+    def __init__(self, content: bytes) -> None:
+        super().__init__(content)
+        self.read_sizes: list[int | None] = []
+
+    def read(self, size: int | None = -1) -> bytes:
+        self.read_sizes.append(size)
+        if size is None or size < 0:
+            raise AssertionError("Upload file was read without a byte bound")
+        return super().read(size)
+
+
+class _InterruptedFile(io.BytesIO):
+    def __init__(self, content: bytes) -> None:
+        super().__init__(content)
+        self._reads = 0
+
+    def read(self, size: int | None = -1) -> bytes:
+        self._reads += 1
+        if self._reads > 1:
+            raise OSError("client disconnected")
+        return super().read(size)
 
 
 class _FakeMediaTool:

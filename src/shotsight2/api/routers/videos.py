@@ -57,8 +57,8 @@ def upload_video(
     filename = file.filename or "upload"
     command = UploadVideoCommand(
         filename=filename,
-        chunks=iter([file.file.read()]),
         received_at=datetime.now(UTC),
+        stream=file.file,
     )
     try:
         result = ingestion.ingest(command)
