@@ -245,15 +245,28 @@ def replay_window(
     release_seconds: float,
     source_duration_seconds: float,
     config: RenderConfiguration,
+    *,
+    lifecycle_start_seconds: float | None = None,
+    lifecycle_end_seconds: float | None = None,
 ) -> ReplayWindow:
-    """Build a replay window clamped to the source media duration."""
+    """Build a replay window around lifecycle evidence, or release as fallback."""
 
     if release_seconds < 0:
         raise ValueError("Release timestamp cannot be negative")
     if source_duration_seconds <= 0:
         raise ValueError("Source duration must be positive")
-    requested_start = release_seconds - config.replay_lead_seconds
-    requested_end = release_seconds + config.replay_trail_seconds
+    lifecycle_start = (
+        lifecycle_start_seconds
+        if lifecycle_start_seconds is not None and 0 <= lifecycle_start_seconds <= release_seconds
+        else release_seconds
+    )
+    lifecycle_end = (
+        lifecycle_end_seconds
+        if lifecycle_end_seconds is not None and lifecycle_end_seconds >= release_seconds
+        else release_seconds
+    )
+    requested_start = lifecycle_start - config.replay_lead_seconds
+    requested_end = lifecycle_end + config.replay_trail_seconds
     start = max(0.0, requested_start)
     end = min(source_duration_seconds, requested_end)
     if end <= start:
