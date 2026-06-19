@@ -470,6 +470,44 @@ and baseline formatting before its module can pass the quality gate.
 - Local server smoke: `curl -i http://127.0.0.1:4173/` returned HTTP 200 and
   rendered the Video Library empty state.
 
+### Upload Redirect HTML Route Fix
+
+- Patched on 2026-06-19 after a successful upload redirected to
+  `GET /videos/{video_id}` and displayed raw JSON instead of the server-rendered
+  video detail page.
+- Root cause: both the Application API and Presentation layer registered
+  `GET /videos/{video_id}`. In the combined local app, API routes were attached
+  before presentation routes, so the upload redirect matched the JSON API route
+  first.
+- Fix: `create_app()` now registers the Presentation layer before the API
+  routers in the combined local runtime. Standalone API tests still call
+  `register_routes()` directly, so the API contract remains covered.
+- Added a regression to `tests/test_app_runtime.py` that seeds a real SQLite
+  video record through the app runtime and verifies `GET /videos/{id}` returns
+  `text/html` with the Video Detail page.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/test_app_runtime.py tests/test_health.py tests/presentation/test_presentation.py`
+- Result: 69 focused tests passed.
+- Full product-readiness gate run:
+  `COVERAGE_FILE=/private/tmp/shotsight2-product-readiness.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 441 tests passed, total coverage 92.22%.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed: no issues in 148 source files.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts`
+  passed.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts`
+  passed.
+- `git diff --check` passed.
+- Local server smoke:
+  `curl -i http://127.0.0.1:4173/videos/video-3479fe147f334a3684b8f89d37efa5a5`
+  returned HTTP 200 with `content-type: text/html; charset=utf-8` and rendered
+  the uploaded `bball_pt2.mov` detail page.
+- Remaining release blockers observed during this pass:
+  - `mlx_sam3` unavailable.
+  - `sam3` unavailable.
+  - Docker CLI available, but `colima status` still reports
+    `colima is not running`.
+
 ### Docker/Colima Smoke
 
 - Attempted on 2026-06-19.

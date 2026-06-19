@@ -94,8 +94,6 @@ def create_app(
         )
     )
 
-    register_routes(application)
-
     runtime = _create_local_runtime(application_settings)
     application.state.runtime = runtime
     application.dependency_overrides[get_video_library_service] = lambda: runtime.video_library
@@ -112,6 +110,7 @@ def create_app(
     from shotsight2.presentation import register_presentation
 
     register_presentation(application)
+    register_routes(application)
 
     application.dependency_overrides[get_settings] = lambda: application_settings
     application.dependency_overrides[get_backend_registry] = lambda: registry
