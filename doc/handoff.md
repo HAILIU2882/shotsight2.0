@@ -5,7 +5,7 @@ Last updated: 2026-06-19
 ## Repository
 
 - Local main workspace: `/Users/hailiu/Desktop/Projects/shotsight2.0`
-- Module worktrees: `/Users/hailiu/Desktop/Projects/shotsight2-worktrees`
+- Module worktrees: `/Users/hailiu/Desktop/Projects/shotsight2.0/worktrees`
 - Remote main is expected to track `origin/main`.
 - Active development follows `doc/prompt.md`: one module branch/worktree at a time when dependencies conflict, or parallel branches/worktrees when independent.
 
@@ -48,7 +48,8 @@ See `doc/reports/blocked.md` for the formal blocker entries.
 Artifact Rendering is implemented on:
 
 - Branch: `codex/artifact-rendering`
-- Worktree: `/Users/hailiu/Desktop/Projects/shotsight2-worktrees/artifact-rendering`
+- Existing local worktree: `/Users/hailiu/Desktop/Projects/shotsight2-worktrees/artifact-rendering`
+- Preferred future worktree location: `/Users/hailiu/Desktop/Projects/shotsight2.0/worktrees/artifact-rendering`
 - Commit: `62ee21d Implement artifact rendering module`
 
 Diff summary from `main...codex/artifact-rendering`:
@@ -79,10 +80,26 @@ Suggested patch location:
 - Implement `_ensure_unique_destinations(staged: Sequence[_StagedRenderedArtifact]) -> None` near the other private helpers.
 - Add a regression test with two attempts whose IDs sanitize to the same replay filename.
 
+For a fresh clone or a new AI workspace, recreate the Artifact Rendering
+worktree inside the project folder first:
+
+```sh
+cd /Users/hailiu/Desktop/Projects/shotsight2.0
+git fetch origin
+git worktree add worktrees/artifact-rendering -b codex/artifact-rendering origin/codex/artifact-rendering
+```
+
+If the local `codex/artifact-rendering` branch already exists and is not
+checked out elsewhere, use:
+
+```sh
+git worktree add worktrees/artifact-rendering codex/artifact-rendering
+```
+
 After patching, rerun:
 
 ```sh
-cd /Users/hailiu/Desktop/Projects/shotsight2-worktrees/artifact-rendering
+cd /Users/hailiu/Desktop/Projects/shotsight2.0/worktrees/artifact-rendering
 COVERAGE_FILE=/private/tmp/shotsight2-artifact-rendering.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80
 PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests
 /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts
@@ -115,7 +132,7 @@ Expected branch/worktree:
 
 ```sh
 cd /Users/hailiu/Desktop/Projects/shotsight2.0
-git worktree add ../shotsight2-worktrees/review -b codex/review main
+git worktree add worktrees/review -b codex/review main
 ```
 
 Use:
@@ -157,7 +174,7 @@ Recommended worktree pattern:
 
 ```sh
 cd /Users/hailiu/Desktop/Projects/shotsight2.0
-git worktree add ../shotsight2-worktrees/<module-name> -b codex/<module-name> main
+git worktree add worktrees/<module-name> -b codex/<module-name> main
 ```
 
 Recommended subagent prompt template:
@@ -166,7 +183,7 @@ Recommended subagent prompt template:
 You are implementing the <Module Name> module for ShotSight 2.0.
 
 Workspace:
-/Users/hailiu/Desktop/Projects/shotsight2-worktrees/<module-name>
+/Users/hailiu/Desktop/Projects/shotsight2.0/worktrees/<module-name>
 
 Read first:
 - doc/proposal.md

@@ -22,3 +22,6 @@ data/models/*
 !data/artifacts/.gitkeep
 !data/models/.gitkeep
 
+worktrees/*
+!worktrees/.gitkeep
+!worktrees/README.md
