@@ -5,19 +5,26 @@ basketball videos. The intended product reports shot attempts, makes, misses,
 shooting percentage, shot locations, per-shot replays, and an annotated full
 video.
 
-The repository currently contains the approved product proposal and a minimal,
-cross-platform engineering scaffold. The computer-vision pipeline is not yet
-implemented. SAM 3.1 is the preferred research candidate, subject to a local
-hardware and accuracy proof of concept.
+The repository now contains the local FastAPI application, SQLite persistence,
+filesystem artifact storage, upload/reanalysis/review/deletion services,
+server-rendered bilingual UI, OpenCV fallback tracking contracts, and tested
+analysis pipeline boundaries.
+
+Some model-quality gates are intentionally still blocked until approved local
+model runtimes and ground-truth labels are available. See
+`doc/reports/blocked.md` and `doc/tasks/progress.md` for the current release
+status.
 
 ## Requirements
 
 - Python 3.12
 - FFmpeg available on `PATH`
 - Optional Docker
-- A CUDA-compatible GPU is currently required by the official SAM 3 video
-  implementation. CPU, Apple Silicon, and non-NVIDIA support require a fallback
-  backend or a different tracker.
+- Optional SAM/MLX model runtimes and authorized weights for advanced tracking
+  validation.
+
+The OpenCV fallback path and backend interfaces are implemented. Real MLX/SAM
+benchmark validation remains blocked without the optional runtime/weights.
 
 ## Local Setup
 
@@ -39,8 +46,19 @@ Copy-Item .env.example .env
 
 Open `http://127.0.0.1:4173/health`.
 
+Run the quality gates:
+
+```sh
+PYTHONPATH=src .venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80
+PYTHONPATH=src .venv/bin/mypy --strict src tests
+.venv/bin/ruff check src tests scripts
+.venv/bin/ruff format --check src tests scripts
+```
+
 ## Documentation
 
 - [Product proposal](doc/proposal.md)
 - [Architecture notes](doc/architecture.md)
-
+- [Detailed design](doc/detailed-design.md)
+- [Progress and release gates](doc/tasks/progress.md)
+- [Blocked work](doc/reports/blocked.md)

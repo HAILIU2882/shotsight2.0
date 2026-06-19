@@ -316,7 +316,7 @@ and baseline formatting before its module can pass the quality gate.
 ### Analysis Pipeline Orchestrator
 
 - Completed in `codex/analysis-pipeline` on 2026-06-19.
-- 46 new pipeline tests; 275 total tests, 267 passed with integrated coverage of 84%.
+- 46 new pipeline tests; integrated pipeline gates passed with 84% coverage.
 - Full strict mypy, Ruff lint, Ruff format, and `git diff --check` gates passed.
 - The module defines `StageResult` and `PipelineContext` immutable types for
   threading identifiers and accumulated results between stages without hidden
@@ -396,3 +396,67 @@ and baseline formatting before its module can pass the quality gate.
 - `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts`
   passed.
 - `git diff --check` passed.
+
+### End-to-End Local Workflow Release Gate
+
+- Added on 2026-06-19 in `tests/e2e/test_local_workflow.py`.
+- The test uses a migrated SQLite database and the real filesystem artifact
+  store, with only media probing and queue delivery faked to avoid requiring a
+  real uploaded video file or live worker process.
+- Covered workflow:
+  upload source bytes, persist original artifact, request analysis, publish a
+  completed run, apply review correction and player rename, request
+  reanalysis, publish a second completed run, verify only the newest run is
+  effective, build deletion inventory, delete video-owned records and
+  filesystem artifacts.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/e2e/test_local_workflow.py`
+- Result: 1 end-to-end release-gate test passed.
+- Additional checks run after adding the test:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed with no issues in 147 source files, and
+  `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check tests/e2e/test_local_workflow.py`
+  passed.
+
+### Final Main Quality Gate With E2E
+
+- Run on 2026-06-19 after adding the end-to-end release-gate workflow test.
+- `COVERAGE_FILE=/private/tmp/shotsight2-main-e2e.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 438 tests passed, total coverage 91.95%.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed: no issues in 147 source files.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts`
+  passed.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts`
+  passed.
+- `git diff --check` passed.
+
+### macOS Native App Smoke
+
+- Run on 2026-06-19 with the local virtual environment.
+- Command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python -c 'from fastapi.testclient import TestClient; from shotsight2.main import create_app; c=TestClient(create_app()); r=c.get("/health"); print(r.status_code); print(r.text[:300])'`
+- Result: `/health` returned HTTP 200 on Darwin arm64 with Python 3.12.12.
+- The health payload reported optional SAM/MLX backends as unavailable, which
+  matches the current blocked-work entries.
+
+### Docker/Colima Smoke
+
+- Attempted on 2026-06-19.
+- `docker --version` passed with Docker version 29.5.3.
+- `which colima` found `/opt/homebrew/bin/colima`.
+- `colima status` failed with `colima is not running`.
+- `docker build -t shotsight2-smoke:local .` failed because Docker could not
+  connect to `/Users/hailiu/.colima/default/docker.sock`.
+- Result: Docker/Colima smoke remains blocked by local daemon state; see
+  `doc/reports/blocked.md`.
+
+### Requirements Traceability Audit
+
+- Added on 2026-06-19 in `doc/reports/requirements-traceability.md`.
+- The matrix maps product requirement areas to implementation evidence and
+  explicitly identifies blocked or deferred requirements.
+- Result: no requirement is silently omitted, but the release gate remains
+  unchecked because MLX/SAM validation, ground-truth benchmark labels,
+  visual-render baselines, Docker/Colima smoke, and Windows/Linux smoke are not
+  complete.

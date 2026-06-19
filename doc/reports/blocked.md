@@ -76,3 +76,20 @@
 - **Unblock condition:** Add authorized representative source media plus
   approved annotated-frame snapshots, then compare decoded rendered frames
   against those baselines in the artifact rendering test suite.
+
+## Docker/Colima Smoke Test
+
+- **Date:** 2026-06-19
+- **Module:** Release Gate
+- **Blocked item:** Docker/Colima runtime smoke.
+- **Status:** Docker CLI and Colima are installed, but the Colima daemon is not
+  running.
+- **Reason:** `docker build -t shotsight2-smoke:local .` failed because Docker
+  could not connect to `/Users/hailiu/.colima/default/docker.sock`.
+- **Verified with:** `docker --version` returned Docker version 29.5.3;
+  `which colima` returned `/opt/homebrew/bin/colima`; `colima status` returned
+  `colima is not running`.
+- **Impact:** Dockerfile contents can be inspected, but Docker image build/run
+  smoke cannot be claimed in the current local runtime state.
+- **Unblock condition:** Start Colima or another Docker daemon, then run
+  `docker build -t shotsight2-smoke:local .` and a container `/health` smoke.
