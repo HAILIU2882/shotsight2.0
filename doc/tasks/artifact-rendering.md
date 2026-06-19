@@ -25,6 +25,10 @@ Media processing, artifact store, tracks, attempts, calibration, localization.
 - [x] `RND-012` Clean partial renders on failure.
 - [x] `RND-013` Add tests for clipping boundaries, missing observations, localization, artifact versioning, and encode failure.
 - [x] `RND-014` Add visual regression fixtures for representative overlay frames.
+- [x] `RND-015` Decode the source sequentially and reuse timestamp indexes instead of seeking and scanning all observations per output frame.
+- [x] `RND-016` Fail rendering explicitly when source decode ends before the complete expected frame sequence.
+- [x] `RND-017` Roll back already promoted outputs and remaining temporary files when any later artifact promotion fails.
+- [x] `RND-018` Bound replays around persisted lifecycle start/result evidence, with release-centered fallback for older or manual attempts.
 
 ## Completion Criteria
 
@@ -38,6 +42,9 @@ Media processing, artifact store, tracks, attempts, calibration, localization.
   deterministic overlay-frame generation, and the existing media adapter encode
   boundary.
 - Deterministic SVG overlay-frame regression fixtures are covered in tests.
-  True real-video visual-regression approval against ground-truth snapshots
-  remains blocked until authorized media snapshots are available; see
-  `doc/reports/blocked.md`.
+- A generated one-second source with audio is decoded, annotated, encoded, and
+  decoded again in the test suite. The smoke verifies overlay-region pixel
+  changes, duration, dimensions, and retained audio without committing media.
+- Human-approved visual-regression comparison against representative real
+  basketball snapshots remains blocked until approved baselines are available;
+  see `doc/reports/blocked.md`.

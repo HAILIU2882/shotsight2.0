@@ -55,20 +55,24 @@
 
 ## Artifact Rendering Real-Video Visual Regression
 
-- **Date:** 2026-06-19
+- **Date:** 2026-06-20
 - **Module:** Artifact Rendering
 - **Blocked item:** Real-video visual-regression comparison beyond deterministic
   overlay-frame SVG fixtures.
-- **Status:** Deterministic overlay frame regression is implemented and tested;
-  real-video snapshot comparison is blocked.
+- **Status:** Deterministic overlay regression and generated-video encode/decode
+  smoke coverage are implemented; human-approved real-video snapshot
+  comparison remains blocked.
 - **Reason:** The repository does not contain approved ground-truth annotated
   video frames or snapshot images for representative real media.
-- **Verified with:** Artifact Rendering tests compare deterministic SVG overlay
-  output from stored observations; no real-video visual baseline files are
-  present in the repository.
-- **Impact:** Rendering logic, artifact staging, metadata, localization, and
-  media encode boundaries are covered, but no claim is made that a real encoded
-  video visually matches a human-approved baseline frame.
+- **Verified with:** Artifact Rendering tests compare deterministic SVG output
+  and render a generated one-second H.264/AAC source through real OpenCV and
+  FFmpeg. The decoded output has changed pixels in the overlay region, expected
+  duration and dimensions, and retained audio. No human-approved real-video
+  baseline files are present in the repository.
+- **Impact:** Rendering mechanics, visual overlay placement, sequential decode,
+  media encode, and audio retention are covered without external fixtures. No
+  claim is made that a real basketball video visually matches a human-approved
+  baseline frame.
 - **Unblock condition:** Add authorized representative source media plus
   approved annotated-frame snapshots, then compare decoded rendered frames
   against those baselines in the artifact rendering test suite.

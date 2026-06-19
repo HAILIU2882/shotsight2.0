@@ -290,6 +290,32 @@ and baseline formatting before its module can pass the quality gate.
   snapshots remains blocked; deterministic overlay-frame regression is covered
   by unit tests.
 
+### Artifact Rendering Reliability and Performance Corrections
+
+- Completed in `codex/artifact-reliability` on 2026-06-20.
+- Full-video rendering now decodes source frames sequentially and builds one
+  bisect-based timestamp index for nearby observations and ball trajectories,
+  eliminating per-output-frame seeks and full observation scans.
+- Rendering raises an explicit incomplete-decode error if the source ends
+  before every expected output frame is written.
+- Multi-artifact promotion now uses compensating rollback: a later promotion
+  failure removes prior promoted outputs and every remaining temporary file.
+- Replay windows use persisted lifecycle possession/result evidence when valid,
+  while manual, legacy, or malformed evidence conservatively falls back to the
+  release-centered window.
+- A generated one-second H.264/AAC smoke uses real OpenCV and FFmpeg, decodes
+  the rendered output, verifies overlay-region pixel changes, checks expected
+  duration and dimensions, and confirms audio retention.
+- Focused command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/artifact_rendering/test_artifact_rendering.py`
+  passed: 11 tests.
+- Full coverage gate:
+  `COVERAGE_FILE=/private/tmp/shotsight2-artifact-reliability.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 450 tests, total coverage 92.15%.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed: no issues in 149 source files.
+- Ruff lint, Ruff format check, and `git diff --check` passed.
+
 ### Review
 
 - Completed in `codex/review` on 2026-06-19.

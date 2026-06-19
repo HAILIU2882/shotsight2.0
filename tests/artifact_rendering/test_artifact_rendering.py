@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
+import cv2
+import numpy as np
 import pytest
 
+from shotsight2.adapters.ffmpeg.adapter import FFmpegAdapter
 from shotsight2.adapters.filesystem.artifact_store import ArtifactStoreRoots, FileSystemArtifactStore
 from shotsight2.domain import PlayerTrack, ReviewStatus, ShotAttempt, ShotLocation, ShotOutcome
-from shotsight2.domain.artifacts import ArtifactId
+from shotsight2.domain.artifacts import ArtifactId, ArtifactMetadata
 from shotsight2.domain.media import (
     AudioStreamMetadata,
     ClipRequest,
@@ -50,6 +55,7 @@ from shotsight2.domain.tracking import (
 from shotsight2.services.artifact_rendering import (
     ArtifactRenderingError,
     ArtifactRenderingService,
+    OpenCVOverlayFrameSequenceRenderer,
     OverlaySequenceRequest,
     RenderRunRequest,
     heatmap_render_data,
@@ -111,6 +117,25 @@ def test_encode_failure_cleans_temporary_outputs_and_publishes_nothing(tmp_path:
     )
 
     with pytest.raises(ArtifactRenderingError):
+        service.render_run(_request(source))
+
+    assert [item.artifact_id for item in store.inventory_for_video("video-1").artifacts] == [source]
+    assert [path for path in roots.temporary.rglob("*") if path.is_file()] == []
+
+
+def test_promotion_failure_rolls_back_prior_outputs_and_temporaries(tmp_path: Path) -> None:
+    roots = ArtifactStoreRoots.under(tmp_path / "data")
+    store = _FailingPromotionStore(roots, fail_on_promotion=2)
+    source = _source_artifact(store)
+    service = ArtifactRenderingService(
+        artifact_store=store,
+        media_tool=_FakeMediaTool(),
+        observations=_ObservationRepository(()),
+        frame_renderer=_FakeFrameRenderer(),
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(ArtifactRenderingError, match="all promoted outputs were rolled back"):
         service.render_run(_request(source))
 
     assert [item.artifact_id for item in store.inventory_for_video("video-1").artifacts] == [source]
@@ -247,6 +272,99 @@ def test_render_configuration_versions_and_replay_windows_are_stable() -> None:
     assert english.version_identifier != chinese.version_identifier
 
 
+def test_render_run_uses_lifecycle_start_and_result_for_replay_bounds(tmp_path: Path) -> None:
+    roots = ArtifactStoreRoots.under(tmp_path / "data")
+    store = FileSystemArtifactStore(roots)
+    source = _source_artifact(store)
+    media = _FakeMediaTool()
+    evidence: JsonObject = {
+        "source": "shot_lifecycle",
+        "events": [
+            {"kind": "possession_entered", "timestamp_seconds": 2.0},
+            {"kind": "release_detected", "timestamp_seconds": 5.0},
+            {"kind": "rim_interaction_detected", "timestamp_seconds": 7.0},
+        ],
+        "result_window": {"start_seconds": 6.5, "end_seconds": 7.2},
+    }
+    service = ArtifactRenderingService(
+        artifact_store=store,
+        media_tool=media,
+        observations=_ObservationRepository(()),
+        frame_renderer=_FakeFrameRenderer(),
+        clock=lambda: NOW,
+    )
+
+    result = service.render_run(
+        _request(
+            source,
+            attempts=(_attempt(release_seconds=5.0, evidence=evidence),),
+            duration_seconds=10.0,
+            config=RenderConfiguration(replay_lead_seconds=0.5, replay_trail_seconds=0.75),
+        )
+    )
+
+    assert result.replay_windows[0].start_seconds == 1.5
+    assert result.replay_windows[0].end_seconds == 7.95
+    assert media.clip_requests[0].start_seconds == 1.5
+    assert media.clip_requests[0].end_seconds == 7.95
+
+
+def test_opencv_renderer_decodes_sequentially_and_requires_complete_sequence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    complete_capture = _FakeCapture(3)
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _source: complete_capture)
+    renderer = OpenCVOverlayFrameSequenceRenderer()
+    request = _overlay_sequence_request(tmp_path, duration_seconds=0.3)
+
+    renderer.render_sequence(request)
+
+    assert complete_capture.read_count == 3
+    assert complete_capture.released
+    assert len(tuple(tmp_path.glob("frame-*.png"))) == 3
+
+    incomplete_directory = tmp_path / "incomplete"
+    incomplete_directory.mkdir()
+    incomplete_capture = _FakeCapture(2)
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _source: incomplete_capture)
+
+    with pytest.raises(ArtifactRenderingError, match="Source decode ended before the complete overlay sequence"):
+        renderer.render_sequence(_overlay_sequence_request(incomplete_directory, duration_seconds=0.3))
+
+    assert incomplete_capture.released
+
+
+def test_generated_video_render_smoke_preserves_media_and_draws_overlay(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("FFmpeg and ffprobe are required for the generated-video rendering smoke")
+    generated = _generated_video(tmp_path)
+    roots = ArtifactStoreRoots.under(tmp_path / "data")
+    store = FileSystemArtifactStore(roots)
+    source = store.original_id("video-1", "mp4")
+    store.write_atomic(source, (generated.read_bytes(),))
+    service = ArtifactRenderingService(
+        artifact_store=store,
+        media_tool=FFmpegAdapter(),
+        observations=_ObservationRepository((_observation("ball", TrackedObjectClass.BASKETBALL, 0.0),)),
+        clock=lambda: NOW,
+    )
+
+    result = service.render_run(_request(source))
+    rendered = next(item for item in result.metadata if item.kind is RenderArtifactKind.ANNOTATED_VIDEO)
+    with store.local_path(ArtifactId(rendered.artifact_id)) as rendered_path:
+        metadata = FFmpegAdapter().probe(rendered_path)
+        source_frame = _first_video_frame(generated)
+        rendered_frame = _first_video_frame(rendered_path)
+
+    overlay_region = cv2.absdiff(source_frame[6:26, 6:26], rendered_frame[6:26, 6:26])
+    assert float(overlay_region.mean()) > 8.0
+    assert metadata.duration_seconds == pytest.approx(1.0, abs=0.15)
+    assert metadata.video.width == 160
+    assert metadata.video.height == 90
+    assert metadata.audio_streams
+
+
 @dataclass(slots=True)
 class _FakeMediaTool:
     fail_encode: bool = False
@@ -300,6 +418,39 @@ class _FakeFrameRenderer:
         return request.output_directory / request.frame_pattern
 
 
+class _FailingPromotionStore(FileSystemArtifactStore):
+    def __init__(self, roots: ArtifactStoreRoots, *, fail_on_promotion: int) -> None:
+        super().__init__(roots)
+        self._fail_on_promotion = fail_on_promotion
+        self._promotion_count = 0
+
+    def promote(self, temporary_id: ArtifactId, destination_id: ArtifactId) -> ArtifactMetadata:
+        self._promotion_count += 1
+        if self._promotion_count == self._fail_on_promotion:
+            raise OSError("simulated promotion failure")
+        return super().promote(temporary_id, destination_id)
+
+
+class _FakeCapture:
+    def __init__(self, frame_count: int) -> None:
+        self._frames = [np.zeros((90, 160, 3), dtype=np.uint8) for _ in range(frame_count)]
+        self.read_count = 0
+        self.released = False
+
+    def isOpened(self) -> bool:  # noqa: N802 - OpenCV compatibility
+        return True
+
+    def read(self) -> tuple[bool, Any]:
+        if self.read_count >= len(self._frames):
+            return False, None
+        frame = self._frames[self.read_count]
+        self.read_count += 1
+        return True, frame.copy()
+
+    def release(self) -> None:
+        self.released = True
+
+
 class _ObservationRepository:
     def __init__(self, observations: Sequence[TrackObservation]) -> None:
         self._observations = tuple(observations)
@@ -325,23 +476,30 @@ def _request(
     *,
     attempts: tuple[ShotAttempt, ...] | None = None,
     locations: tuple[ShotLocation, ...] | None = None,
+    duration_seconds: float = 1.0,
+    config: RenderConfiguration | None = None,
 ) -> RenderRunRequest:
     return RenderRunRequest(
         video_id="video-1",
         run_id="run-1",
         source_artifact_id=source,
-        source_duration_seconds=1.0,
+        source_duration_seconds=duration_seconds,
         source_width=160,
         source_height=90,
         source_fps=10.0,
         attempts=attempts or (_attempt(release_seconds=0.2),),
         locations=locations if locations is not None else (_location(),),
         players=(PlayerTrack("player-1", "run-1", "video-1", "Player 1", "Alice", 0.9),),
-        config=RenderConfiguration(replay_lead_seconds=0.5, replay_trail_seconds=1.0),
+        config=config or RenderConfiguration(replay_lead_seconds=0.5, replay_trail_seconds=1.0),
     )
 
 
-def _attempt(attempt_id: str = "attempt-1", *, release_seconds: float = 0.2) -> ShotAttempt:
+def _attempt(
+    attempt_id: str = "attempt-1",
+    *,
+    release_seconds: float = 0.2,
+    evidence: JsonObject | None = None,
+) -> ShotAttempt:
     return ShotAttempt(
         attempt_id,
         "run-1",
@@ -351,7 +509,7 @@ def _attempt(attempt_id: str = "attempt-1", *, release_seconds: float = 0.2) -> 
         "THREE_POINT",
         0.82,
         ReviewStatus.UNREVIEWED,
-        {"source": "test"},
+        evidence or {"source": "test"},
     )
 
 
@@ -418,3 +576,63 @@ def _metadata(path: Path) -> MediaMetadata:
         ),
         audio_streams=(AudioStreamMetadata(1, "aac", 44_100, 1),),
     )
+
+
+def _overlay_sequence_request(output_directory: Path, *, duration_seconds: float) -> OverlaySequenceRequest:
+    source = output_directory / "source.mp4"
+    source.touch()
+    return OverlaySequenceRequest(
+        source=source,
+        output_directory=output_directory,
+        frame_pattern="frame-%06d.png",
+        width=160,
+        height=90,
+        duration_seconds=duration_seconds,
+        frames_per_second=10.0,
+        source_frames_per_second=10.0,
+        observations=(),
+        attempts=(),
+        players_by_id={},
+        config=RenderConfiguration(overlay_frames_per_second=10.0),
+    )
+
+
+def _generated_video(tmp_path: Path) -> Path:
+    output = tmp_path / "generated-source.mp4"
+    command = (
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:s=160x90:r=10:d=1",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=44100:duration=1",
+        "-shortest",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        str(output),
+    )
+    completed = subprocess.run(command, check=False, capture_output=True, text=True, shell=False)
+    if completed.returncode != 0:
+        pytest.fail(f"Generated-video fixture failed: {completed.stderr}")
+    return output
+
+
+def _first_video_frame(path: Path) -> Any:
+    capture = cv2.VideoCapture(str(path))
+    try:
+        ok, frame = capture.read()
+    finally:
+        capture.release()
+    if not ok:
+        pytest.fail(f"Could not decode first video frame: {path.name}")
+    return frame

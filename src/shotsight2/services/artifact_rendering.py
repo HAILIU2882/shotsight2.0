@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import html
+import math
 import tempfile
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -139,6 +141,7 @@ class OverlaySequenceRequest:
     height: int
     duration_seconds: float
     frames_per_second: float
+    source_frames_per_second: float
     observations: tuple[TrackObservation, ...]
     attempts: tuple[ShotAttempt, ...]
     players_by_id: Mapping[str, PlayerTrack]
@@ -161,19 +164,33 @@ class OpenCVOverlayFrameSequenceRenderer:
         capture = cv2.VideoCapture(str(request.source))
         if not capture.isOpened():
             raise ArtifactRenderingError("Could not open source media for overlay rendering")
-        frame_count = max(1, int(request.duration_seconds * request.frames_per_second))
+        if request.source_frames_per_second <= 0:
+            capture.release()
+            raise ArtifactRenderingError("Source frame rate must be positive")
+        frame_count = max(1, math.ceil(request.duration_seconds * request.frames_per_second - 1e-9))
+        observation_index = _ObservationTimelineIndex.build(request.observations)
+        decoded_source_index = -1
+        frame: Any | None = None
         try:
             for index in range(frame_count):
                 timestamp = index / request.frames_per_second
-                capture.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000.0)
-                ok, frame = capture.read()
-                if not ok:
-                    break
-                overlay = overlay_frame_at(
+                target_source_index = round(timestamp * request.source_frames_per_second)
+                while decoded_source_index < target_source_index:
+                    ok, decoded_frame = capture.read()
+                    if not ok:
+                        raise ArtifactRenderingError(
+                            "Source decode ended before the complete overlay sequence "
+                            f"({index}/{frame_count} frames written)"
+                        )
+                    frame = decoded_frame
+                    decoded_source_index += 1
+                if frame is None:
+                    raise ArtifactRenderingError("Source decode produced no frames")
+                overlay = _overlay_frame_from_index(
                     timestamp,
                     request.width,
                     request.height,
-                    request.observations,
+                    observation_index,
                     request.attempts,
                     request.players_by_id,
                     request.config,
@@ -212,11 +229,14 @@ class ArtifactRenderingService:
         replay_windows: list[ReplayWindow] = []
         try:
             for attempt in request.attempts:
+                lifecycle_start, lifecycle_end = _lifecycle_replay_bounds(attempt)
                 window = replay_window(
                     attempt.id,
                     attempt.release_seconds,
                     request.source_duration_seconds,
                     request.config,
+                    lifecycle_start_seconds=lifecycle_start,
+                    lifecycle_end_seconds=lifecycle_end,
                 )
                 replay_windows.append(window)
                 staged.append(self._stage_replay(request, attempt, window))
@@ -247,19 +267,35 @@ class ArtifactRenderingService:
 
         artifacts: list[Artifact] = []
         rich_metadata: list[RenderedArtifactMetadata] = []
-        for item in staged:
-            metadata = self._artifact_store.promote(item.temporary_id, item.destination_id)
-            artifact, rich = self._artifact_record(
-                request,
-                item.kind,
-                metadata,
-                codec=item.codec,
-                width=item.width,
-                height=item.height,
-                duration_seconds=item.duration_seconds,
-            )
-            artifacts.append(artifact)
-            rich_metadata.append(rich)
+        promoted: list[ArtifactId] = []
+        try:
+            for item in staged:
+                metadata = self._artifact_store.promote(item.temporary_id, item.destination_id)
+                promoted.append(item.destination_id)
+                artifact, rich = self._artifact_record(
+                    request,
+                    item.kind,
+                    metadata,
+                    codec=item.codec,
+                    width=item.width,
+                    height=item.height,
+                    duration_seconds=item.duration_seconds,
+                )
+                artifacts.append(artifact)
+                rich_metadata.append(rich)
+        except Exception as error:
+            for item in staged:
+                _remove_artifact(self._artifact_store, item.temporary_id)
+            rollback_failures = [
+                artifact_id
+                for artifact_id in reversed(promoted)
+                if not _remove_artifact(self._artifact_store, artifact_id)
+            ]
+            message = "Artifact promotion failed; all promoted outputs were rolled back"
+            if rollback_failures:
+                failed = ", ".join(str(item) for item in rollback_failures)
+                message = f"Artifact promotion failed and rollback could not remove: {failed}"
+            raise ArtifactRenderingError(message) from error
         return RenderRunResult(tuple(artifacts), tuple(rich_metadata), tuple(replay_windows))
 
     def _stage_replay(
@@ -323,6 +359,7 @@ class ArtifactRenderingService:
                         height=request.source_height,
                         duration_seconds=request.source_duration_seconds,
                         frames_per_second=request.config.overlay_frames_per_second,
+                        source_frames_per_second=request.source_fps,
                         observations=observations,
                         attempts=request.attempts,
                         players_by_id=players_by_id,
@@ -495,11 +532,66 @@ def overlay_frame_at(
 ) -> OverlayFrame:
     """Build a deterministic overlay frame from observations near a timestamp."""
 
-    nearby = tuple(
-        observation
-        for observation in observations
-        if abs(observation.timestamp_seconds - timestamp_seconds) <= config.observation_tolerance_seconds
+    return _overlay_frame_from_index(
+        timestamp_seconds,
+        width,
+        height,
+        _ObservationTimelineIndex.build(observations),
+        attempts,
+        players_by_id,
+        config,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservationTimelineIndex:
+    """Timestamp index that avoids scanning every observation for every frame."""
+
+    observations: tuple[TrackObservation, ...]
+    timestamps: tuple[float, ...]
+    ball_observations: tuple[TrackObservation, ...]
+    ball_timestamps: tuple[float, ...]
+
+    @classmethod
+    def build(cls, observations: Sequence[TrackObservation]) -> _ObservationTimelineIndex:
+        """Sort observations once and pre-index basketball trajectory samples."""
+
+        ordered = tuple(sorted(observations, key=lambda item: (item.timestamp_seconds, *_observation_sort_key(item))))
+        balls = tuple(item for item in ordered if item.object_class is TrackedObjectClass.BASKETBALL)
+        return cls(
+            observations=ordered,
+            timestamps=tuple(item.timestamp_seconds for item in ordered),
+            ball_observations=balls,
+            ball_timestamps=tuple(item.timestamp_seconds for item in balls),
+        )
+
+    def nearby(self, timestamp_seconds: float, tolerance_seconds: float) -> tuple[TrackObservation, ...]:
+        """Return observations inside one timestamp tolerance window."""
+
+        start = bisect_left(self.timestamps, timestamp_seconds - tolerance_seconds)
+        end = bisect_right(self.timestamps, timestamp_seconds + tolerance_seconds)
+        return self.observations[start:end]
+
+    def ball_between(self, start_seconds: float, end_seconds: float) -> tuple[TrackObservation, ...]:
+        """Return trajectory basketball observations inside an inclusive range."""
+
+        start = bisect_left(self.ball_timestamps, start_seconds)
+        end = bisect_right(self.ball_timestamps, end_seconds)
+        return self.ball_observations[start:end]
+
+
+def _overlay_frame_from_index(
+    timestamp_seconds: float,
+    width: int,
+    height: int,
+    observation_index: _ObservationTimelineIndex,
+    attempts: Sequence[ShotAttempt],
+    players_by_id: Mapping[str, PlayerTrack],
+    config: RenderConfiguration,
+) -> OverlayFrame:
+    """Build one overlay frame from a reusable observation index."""
+
+    nearby = observation_index.nearby(timestamp_seconds, config.observation_tolerance_seconds)
     nearest_by_track: dict[tuple[TrackedObjectClass, str], TrackObservation] = {}
     for observation in nearby:
         key = (observation.object_class, observation.local_track_id)
@@ -515,10 +607,11 @@ def overlay_frame_at(
     )
     ball_points = tuple(
         observation.centroid
-        for observation in observations
-        if observation.object_class is TrackedObjectClass.BASKETBALL
-        and timestamp_seconds - config.trajectory_seconds <= observation.timestamp_seconds <= timestamp_seconds
-        and observation.visibility is not VisibilityState.LOST
+        for observation in observation_index.ball_between(
+            timestamp_seconds - config.trajectory_seconds,
+            timestamp_seconds,
+        )
+        if observation.visibility is not VisibilityState.LOST
     )
     trajectory = None if len(ball_points) < 2 else OverlayTrajectory(ball_points, OverlayState.CERTAIN)
     events = list(_attempt_events(timestamp_seconds, attempts, config))
@@ -840,11 +933,62 @@ def _ensure_unique_destinations(staged: Sequence[_StagedRenderedArtifact]) -> No
 
 
 def _remove_temporary(store: ArtifactStore, temporary_id: ArtifactId) -> None:
+    _remove_artifact(store, temporary_id)
+
+
+def _remove_artifact(store: ArtifactStore, artifact_id: ArtifactId) -> bool:
+    """Best-effort removal used to compensate failed multi-artifact promotion."""
+
     try:
-        with store.local_path(temporary_id) as path:
+        with store.local_path(artifact_id) as path:
             path.unlink(missing_ok=True)
+    except UnknownArtifactError:
+        return True
     except Exception:
-        return
+        return False
+    return True
+
+
+def _lifecycle_replay_bounds(attempt: ShotAttempt) -> tuple[float | None, float | None]:
+    """Extract trustworthy lifecycle start/result bounds from persisted evidence."""
+
+    if attempt.evidence.get("source") != "shot_lifecycle":
+        return None, None
+
+    start_candidates: list[float] = []
+    end_candidates: list[float] = []
+    events = attempt.evidence.get("events")
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            timestamp = _optional_json_float(event.get("timestamp_seconds"))
+            kind = event.get("kind")
+            if timestamp is None:
+                continue
+            if kind == "possession_entered" and timestamp <= attempt.release_seconds:
+                start_candidates.append(timestamp)
+            elif timestamp >= attempt.release_seconds:
+                end_candidates.append(timestamp)
+
+    evidence = attempt.evidence.get("evidence")
+    if isinstance(evidence, list):
+        for item in evidence:
+            if not isinstance(item, dict) or item.get("kind") != "possession":
+                continue
+            timestamp = _optional_json_float(item.get("timestamp_seconds"))
+            if timestamp is not None and timestamp <= attempt.release_seconds:
+                start_candidates.append(timestamp)
+
+    result_window = attempt.evidence.get("result_window")
+    if isinstance(result_window, dict):
+        result_end = _optional_json_float(result_window.get("end_seconds"))
+        if result_end is not None and result_end >= attempt.release_seconds:
+            end_candidates.append(result_end)
+
+    start = min(start_candidates) if start_candidates else None
+    end = max(end_candidates) if end_candidates else None
+    return start, end
 
 
 def _player_name(
@@ -907,6 +1051,12 @@ def _safe_token(value: str) -> str:
 def _json_float(value: JsonValue) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("Expected numeric JSON value")
+    return float(value)
+
+
+def _optional_json_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
     return float(value)
 
 
