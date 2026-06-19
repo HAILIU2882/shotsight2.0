@@ -339,3 +339,60 @@ and baseline formatting before its module can pass the quality gate.
 - Tests cover success, failure at every stage index (parametrized 0–9), cleanup
   behavior, republish ordering, context propagation, stage duration recording,
   and `PipelineStageError` category forwarding.
+
+### Application API
+
+- Reconciled progress documentation on 2026-06-19 after confirming the API
+  package and tests are present on `main`.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/application_api tests/presentation`
+- Result: 127 focused API and Presentation tests passed.
+- API tests cover error translation, video library/detail/upload/delete,
+  analysis start/status, job lookup, segment calibration correction, player
+  rename, attempt CRUD, tracking prompt submission, artifact streaming with
+  range requests, language preferences, route registration, and OpenAPI
+  structure.
+
+### Presentation
+
+- Reconciled progress documentation on 2026-06-19 after confirming the
+  Presentation checklist was complete and focused tests passed.
+- The local virtual environment was missing the already-declared `jinja2`
+  dependency, so `uv pip install --python .venv/bin/python 'jinja2>=3.1,<4'`
+  installed `jinja2==3.1.6` and `markupsafe==3.0.3`.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/application_api tests/presentation`
+- Result: 127 focused API and Presentation tests passed.
+- Presentation tests cover package registration, shell and locale switching,
+  translation completeness, library, upload, video detail, analysis progress,
+  calibration, players, attempt review, statistics/artifact links, tracking
+  repair, deletion confirmation, and accessibility/error states.
+
+### Artifact Rendering Duplicate Destination Guard
+
+- Patched on `main` on 2026-06-19.
+- Added a duplicate destination guard before any staged rendering artifact is
+  promoted, preventing distinct attempt IDs that sanitize to the same replay
+  filename from publishing a partial artifact set.
+- Added a regression test for two colliding replay destination names.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/artifact_rendering/test_artifact_rendering.py`
+- Result: 7 Artifact Rendering tests passed.
+
+### Main Quality Gate After Documentation Reconciliation
+
+- Run on 2026-06-19 after reconciling Application API/Presentation progress
+  docs, adding the Artifact Rendering duplicate destination guard, and adding
+  an explicit `ReviewStatus` export from `shotsight2.domain.review`.
+- Local environment note: the virtual environment was missing the declared
+  `jinja2` dependency; `uv pip install --python .venv/bin/python 'jinja2>=3.1,<4'`
+  installed `jinja2==3.1.6` and `markupsafe==3.0.3`.
+- `COVERAGE_FILE=/private/tmp/shotsight2-main-continue.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 437 tests passed, total coverage 91.95%.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed: no issues in 145 source files.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts`
+  passed.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts`
+  passed.
+- `git diff --check` passed.

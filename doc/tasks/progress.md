@@ -21,8 +21,8 @@
 - [x] [Video Ingestion](video-ingestion.md)
 - [x] [Analysis Job](analysis-job.md)
 - [x] [Video Library](video-library.md)
-- [ ] [Application API](application-api.md)
-- [ ] [Presentation](presentation.md)
+- [x] [Application API](application-api.md)
+- [x] [Presentation](presentation.md)
 - [x] [Deletion](deletion.md)
 
 ## Analysis Pipeline

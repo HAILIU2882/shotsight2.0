@@ -52,88 +52,31 @@ See `doc/reports/blocked.md` for the formal blocker entries.
 
 ## Active Unmerged Work
 
-Artifact Rendering is implemented on:
+There is no known intentional unmerged module work on `main`.
 
-- Branch: `codex/artifact-rendering`
-- Existing local worktree: `/Users/hailiu/Desktop/Projects/shotsight2-worktrees/artifact-rendering`
-- Preferred future worktree location: `/Users/hailiu/Desktop/Projects/shotsight2.0/worktrees/artifact-rendering`
-- Commit: `62ee21d Implement artifact rendering module`
+The historical external worktree
+`/Users/hailiu/Desktop/Projects/shotsight2-worktrees/artifact-rendering` may
+contain an interrupted merge from earlier review work. Treat it as stale unless
+you intentionally inspect and clean it. Future work should use project-local
+worktrees under `/Users/hailiu/Desktop/Projects/shotsight2.0/worktrees`.
 
-Diff summary from `main...codex/artifact-rendering`:
-
-- `src/shotsight2/domain/rendering.py`
-- `src/shotsight2/services/artifact_rendering.py`
-- `tests/artifact_rendering/test_artifact_rendering.py`
-- `doc/tasks/artifact-rendering.md`
-- `doc/tasks/progress.md`
-- `doc/reports/blocked.md`
-- `doc/reports/test-report.md`
-
-Subagent validation reported:
-
-- `pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`: 216 passed, 91.25% coverage
-- `mypy --strict src tests`: passed
-- `ruff check src tests scripts`: passed
-- `ruff format --check src tests scripts`: passed
-- `git diff --check main...HEAD`: passed
-
-Do not merge this branch blindly. During review, one issue was found:
-
-- Replay destination filenames are derived from sanitized attempt IDs. Two distinct attempt IDs can theoretically sanitize to the same filename, which could cause destination collisions. Add an explicit duplicate destination check while all outputs are still staged, before any artifact is promoted.
-
-Suggested patch location:
-
-- Add `_ensure_unique_destinations(staged)` before checking destination existence in `ArtifactRenderingService.render_run`.
-- Implement `_ensure_unique_destinations(staged: Sequence[_StagedRenderedArtifact]) -> None` near the other private helpers.
-- Add a regression test with two attempts whose IDs sanitize to the same replay filename.
-
-For a fresh clone or a new AI workspace, recreate the Artifact Rendering
-worktree inside the project folder first:
-
-```sh
-cd /Users/hailiu/Desktop/Projects/shotsight2.0
-git fetch origin
-git worktree add worktrees/artifact-rendering -b codex/artifact-rendering origin/codex/artifact-rendering
-```
-
-If the local `codex/artifact-rendering` branch already exists and is not
-checked out elsewhere, use:
-
-```sh
-git worktree add worktrees/artifact-rendering codex/artifact-rendering
-```
-
-After patching, rerun:
-
-```sh
-cd /Users/hailiu/Desktop/Projects/shotsight2.0/worktrees/artifact-rendering
-COVERAGE_FILE=/private/tmp/shotsight2-artifact-rendering.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80
-PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests
-/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts
-/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts
-git diff --check main...HEAD
-```
-
-If those pass:
-
-```sh
-cd /Users/hailiu/Desktop/Projects/shotsight2.0
-git merge --no-ff codex/artifact-rendering -m "Merge artifact rendering module"
-COVERAGE_FILE=/private/tmp/shotsight2-main-artifact-rendering.coverage PYTHONPATH=src .venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80
-PYTHONPATH=src .venv/bin/mypy --strict src tests
-.venv/bin/ruff check src tests scripts
-.venv/bin/ruff format --check src tests scripts
-git push origin main
-```
+Artifact Rendering is already on `main`. The previously identified replay
+destination collision issue has been fixed on `main` with a duplicate
+destination guard before promotion and a regression test using two attempt IDs
+that sanitize to the same replay filename.
 
 ## Recommended Next Module
 
 The Presentation module is now complete and merged. All planned modules are on
 `main`. The next work items are:
 
-1. Patch the Artifact Rendering duplicate destination issue (see Active Unmerged Work above).
-2. Merge Artifact Rendering into `main`.
-3. Address formal blockers in `doc/reports/blocked.md` as resources become available.
+1. Run full quality gates on `main` after the latest Artifact Rendering guard
+   and documentation cleanup.
+2. Address formal blockers in `doc/reports/blocked.md` as resources become
+   available.
+3. Run end-to-end local upload, analysis, review, reanalysis, and deletion
+   validation.
+4. Update release-gate status in `doc/tasks/progress.md`.
 
 ## Subagent Setup Instructions
 
@@ -206,12 +149,11 @@ Rules:
 
 Parallelism guidance:
 
-- Artifact Rendering should be fixed and merged before starting Review.
-- Review can start before Application API and Presentation.
-- Analysis Pipeline Orchestrator should wait until Artifact Rendering and
-  Review are merged.
-- Application API should wait until the orchestrator is available.
-- Presentation should wait until Application API has stable routes.
+- All planned implementation modules are currently present on `main`.
+- Use project-local worktrees for any blocker, benchmark, release-gate, or bug
+  fix work.
+- Prefer one corrective branch per blocker or release-gate item so validation
+  and progress updates stay easy to audit.
 
 ## Progress Update Rules
 
@@ -260,10 +202,11 @@ Current formal blockers are tracked in `doc/reports/blocked.md`:
 
 ## Handoff Priorities
 
-1. Commit and push this handoff note on `main`.
-2. Push `codex/artifact-rendering` so the implementation branch is available remotely.
-3. Patch the Artifact Rendering duplicate destination issue.
-4. Rerun all Artifact Rendering gates.
-5. Merge Artifact Rendering into `main` and push.
-6. Start Review module on `codex/review`.
-7. Continue with Analysis Pipeline Orchestrator, then Application API, then Presentation.
+1. Run full `main` quality gates and record results in
+   `doc/reports/test-report.md`.
+2. Address the formal blockers in `doc/reports/blocked.md` when the required
+   model/runtime or ground-truth labels become available.
+3. Execute end-to-end upload, analysis, review, reanalysis, and deletion tests.
+4. Update `doc/tasks/progress.md` release gates only when evidence is recorded.
+5. Keep future corrective work in project-local `worktrees/<task-name>`
+   directories and merge through `main`.

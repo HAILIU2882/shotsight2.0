@@ -117,6 +117,35 @@ def test_encode_failure_cleans_temporary_outputs_and_publishes_nothing(tmp_path:
     assert [path for path in roots.temporary.rglob("*") if path.is_file()] == []
 
 
+def test_duplicate_replay_destinations_fail_before_publishing(tmp_path: Path) -> None:
+    roots = ArtifactStoreRoots.under(tmp_path / "data")
+    store = FileSystemArtifactStore(roots)
+    source = _source_artifact(store)
+    media = _FakeMediaTool()
+    request = _request(
+        source,
+        attempts=(
+            _attempt("attempt/a", release_seconds=0.2),
+            _attempt("attempt:a", release_seconds=0.4),
+        ),
+        locations=(),
+    )
+    service = ArtifactRenderingService(
+        artifact_store=store,
+        media_tool=media,
+        observations=_ObservationRepository(()),
+        frame_renderer=_FakeFrameRenderer(),
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(ArtifactRenderingError, match="Duplicate rendered destination"):
+        service.render_run(request)
+
+    assert len(media.clip_requests) == 2
+    assert [item.artifact_id for item in store.inventory_for_video("video-1").artifacts] == [source]
+    assert [path for path in roots.temporary.rglob("*") if path.is_file()] == []
+
+
 def test_overlay_localization_current_names_and_tracking_states() -> None:
     config = RenderConfiguration(locale=OverlayLocale.CHINESE, observation_tolerance_seconds=0.05)
     players = {"player-1": PlayerTrack("player-1", "run-1", "video-1", "Player 1", "Alice", 0.9)}
@@ -291,7 +320,12 @@ def _source_artifact(store: FileSystemArtifactStore) -> ArtifactId:
     return source
 
 
-def _request(source: ArtifactId) -> RenderRunRequest:
+def _request(
+    source: ArtifactId,
+    *,
+    attempts: tuple[ShotAttempt, ...] | None = None,
+    locations: tuple[ShotLocation, ...] | None = None,
+) -> RenderRunRequest:
     return RenderRunRequest(
         video_id="video-1",
         run_id="run-1",
@@ -300,8 +334,8 @@ def _request(source: ArtifactId) -> RenderRunRequest:
         source_width=160,
         source_height=90,
         source_fps=10.0,
-        attempts=(_attempt(release_seconds=0.2),),
-        locations=(_location(),),
+        attempts=attempts or (_attempt(release_seconds=0.2),),
+        locations=locations if locations is not None else (_location(),),
         players=(PlayerTrack("player-1", "run-1", "video-1", "Player 1", "Alice", 0.9),),
         config=RenderConfiguration(replay_lead_seconds=0.5, replay_trail_seconds=1.0),
     )

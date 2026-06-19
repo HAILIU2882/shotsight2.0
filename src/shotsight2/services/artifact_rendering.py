@@ -233,6 +233,7 @@ class ArtifactRenderingService:
             raise ArtifactRenderingError(message) from error
 
         try:
+            _ensure_unique_destinations(staged)
             for item in staged:
                 try:
                     self._artifact_store.metadata(item.destination_id)
@@ -828,6 +829,14 @@ def _court_svg_header(width: int, height: int) -> list[str]:
 
 def _artifact_record_id(video_id: str, run_id: str, metadata: RenderedArtifactMetadata) -> str:
     return str(uuid5(NAMESPACE_URL, f"shotsight:{video_id}:{run_id}:{metadata.kind}:{metadata.logical_path}"))
+
+
+def _ensure_unique_destinations(staged: Sequence[_StagedRenderedArtifact]) -> None:
+    seen: set[ArtifactId] = set()
+    for item in staged:
+        if item.destination_id in seen:
+            raise ArtifactRenderingError(f"Duplicate rendered destination: {item.destination_id}")
+        seen.add(item.destination_id)
 
 
 def _remove_temporary(store: ArtifactStore, temporary_id: ArtifactId) -> None:
