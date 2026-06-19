@@ -440,6 +440,36 @@ and baseline formatting before its module can pass the quality gate.
 - The health payload reported optional SAM/MLX backends as unavailable, which
   matches the current blocked-work entries.
 
+### Local Runtime Wiring Fix
+
+- Patched on 2026-06-19 after the running app returned HTTP 500 for `GET /`.
+- Root cause: `create_app()` registered API and Presentation routes but did not
+  install concrete dependency overrides for services such as
+  `VideoLibraryService`; production startup was still reaching the
+  `NotImplementedError` provider stubs in `shotsight2.api.deps`.
+- Fix: `shotsight2.main.create_app()` now owns a `LocalRuntime` with migrated
+  SQLite storage, filesystem artifact storage, FFmpeg media adapter, queue,
+  repositories, and concrete application services. The app stores this runtime
+  on `application.state.runtime` and wires the service/media/artifact
+  dependencies through FastAPI overrides.
+- Added `tests/test_app_runtime.py` to render `/` and `/health` through the real
+  app factory without test-only service overrides.
+- Focused validation command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/test_app_runtime.py tests/test_health.py tests/presentation/test_presentation.py`
+- Result: 68 focused tests passed.
+- Full validation:
+  `COVERAGE_FILE=/private/tmp/shotsight2-runtime.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 440 tests passed, total coverage 92.22%.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed: no issues in 148 source files.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff check src tests scripts`
+  passed.
+- `/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/ruff format --check src tests scripts`
+  passed.
+- `git diff --check` passed.
+- Local server smoke: `curl -i http://127.0.0.1:4173/` returned HTTP 200 and
+  rendered the Video Library empty state.
+
 ### Docker/Colima Smoke
 
 - Attempted on 2026-06-19.
