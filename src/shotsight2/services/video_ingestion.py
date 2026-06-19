@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Final
+from typing import BinaryIO, Final
 from uuid import uuid4
 
 from shotsight2.adapters.ffmpeg import MediaErrorCategory, MediaProcessingError
@@ -67,11 +67,17 @@ class VideoIngestionLimits:
 
 @dataclass(frozen=True, slots=True)
 class UploadVideoCommand:
-    """Application command carrying a one-pass byte stream."""
+    """Application command carrying one chunk iterable or binary stream."""
 
     filename: str
-    chunks: Iterable[bytes]
+    chunks: Iterable[bytes] | None = None
     received_at: datetime | None = None
+    stream: BinaryIO | None = None
+
+    def __post_init__(self) -> None:
+        """Require exactly one one-pass upload source."""
+        if (self.chunks is None) == (self.stream is None):
+            raise ValueError("Exactly one of chunks or stream must be provided")
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +144,7 @@ class VideoIngestionService:
                 _INGEST_RUN_ID,
                 suffix=_TEMPORARY_SUFFIX,
             )
-            bytes_written = self._write_upload(temporary_id, command.chunks)
+            bytes_written = self._write_upload(temporary_id, command)
             metadata = self._probe(temporary_id)
             self._validate_metadata(metadata)
             destination_id = self._artifact_store.original_id(video_id, _extension_for(metadata))
@@ -156,6 +162,13 @@ class VideoIngestionService:
         except VideoIngestionError:
             self._cleanup_after_failure(video_id)
             raise
+        except _UploadStreamReadError as error:
+            self._cleanup_after_failure(video_id)
+            raise _ingestion_error(
+                VideoIngestionErrorCode.STREAM_INTERRUPTED,
+                "Upload stream ended before it could be stored.",
+                error,
+            ) from error
         except (ArtifactStoreError, OSError) as error:
             self._cleanup_after_failure(video_id)
             raise _ingestion_error(
@@ -181,7 +194,12 @@ class VideoIngestionService:
             ) from error
         return UploadVideoResult(video=video, metadata=metadata, bytes_written=bytes_written)
 
-    def _write_upload(self, temporary_id: ArtifactId, chunks: Iterable[bytes]) -> int:
+    def _write_upload(self, temporary_id: ArtifactId, command: UploadVideoCommand) -> int:
+        chunks = command.chunks
+        if chunks is None:
+            if command.stream is None:  # pragma: no cover - guarded by UploadVideoCommand
+                raise ValueError("Upload command has no source")
+            chunks = _FileUploadChunks(command.stream, self._limits.chunk_size_hint)
         bounded = _BoundedUploadChunks(chunks, self._limits.max_upload_bytes)
         self._artifact_store.write_atomic(temporary_id, bounded)
         return bounded.bytes_seen
@@ -282,6 +300,28 @@ class _BoundedUploadChunks:
                 )
             if chunk:
                 yield chunk
+
+
+class _FileUploadChunks:
+    """Read a binary upload stream using a fixed upper bound per read."""
+
+    def __init__(self, stream: BinaryIO, chunk_size: int) -> None:
+        self._stream = stream
+        self._chunk_size = chunk_size
+
+    def __iter__(self) -> Iterator[bytes]:
+        while True:
+            try:
+                chunk = self._stream.read(self._chunk_size)
+            except Exception as error:
+                raise _UploadStreamReadError("Could not read the upload stream") from error
+            if not chunk:
+                return
+            yield chunk
+
+
+class _UploadStreamReadError(RuntimeError):
+    """Distinguish client-stream failures from artifact-storage failures."""
 
 
 def _generate_video_id() -> str:

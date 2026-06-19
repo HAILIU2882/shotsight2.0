@@ -52,6 +52,7 @@ from shotsight2.services.analysis_jobs import (
 )
 from shotsight2.services.deletion import ActiveVideoAnalysisError
 from shotsight2.services.video_ingestion import (
+    UploadVideoCommand,
     UploadVideoResult,
     VideoIngestionError,
     VideoIngestionErrorCode,
@@ -424,6 +425,10 @@ class TestUploadVideo:
         data = resp.json()
         assert data["video_id"] == "v1"
         assert data["bytes_written"] == 1024
+        command = ingestion_svc.ingest.call_args.args[0]
+        assert isinstance(command, UploadVideoCommand)
+        assert command.chunks is None
+        assert command.stream is not None
 
     def test_returns_422_on_ingestion_error(self, client: TestClient, ingestion_svc: MagicMock) -> None:
         ingestion_svc.ingest.side_effect = VideoIngestionError(

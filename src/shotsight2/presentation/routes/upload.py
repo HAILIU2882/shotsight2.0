@@ -27,7 +27,7 @@ def upload_page(
 
 
 @router.post("/upload", response_class=HTMLResponse, response_model=None)
-async def upload_submit(
+def upload_submit(
     request: Request,
     file: UploadFile,
     ingestion: Annotated[VideoIngestionService, Depends(get_video_ingestion_service)],
@@ -37,8 +37,8 @@ async def upload_submit(
     filename = file.filename or "upload"
     command = UploadVideoCommand(
         filename=filename,
-        chunks=iter([await file.read()]),
         received_at=datetime.now(UTC),
+        stream=file.file,
     )
     try:
         result = ingestion.ingest(command)
