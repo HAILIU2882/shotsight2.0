@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run repeatable OpenCV tracking metrics on the representative local video."""
+"""Run repeatable tracking metrics on the representative local video."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from time import monotonic
 
 import cv2
 
+from shotsight2.adapters.mlx_sam3 import MLXSam3ImageBackend
 from shotsight2.adapters.opencv import OpenCVTrackingBackend, OpenCVTrackingFrameSource
 from shotsight2.domain.tracking import (
     CameraSegmentInput,
@@ -19,6 +20,7 @@ from shotsight2.domain.tracking import (
     TrackingPrompt,
     TrackObservation,
 )
+from shotsight2.ports.tracking import TrackingBackend
 from shotsight2.services.tracking import TrackingOrchestrator
 
 DEFAULT_VIDEO = Path("/Users/hailiu/Desktop/bball_pt2.mov")
@@ -52,8 +54,15 @@ class _Prompts:
         return [item for item in self.items if item.segment_id == segment_id]
 
 
-def evaluate(source: Path, *, maximum_seconds: float, sampling_fps: float) -> dict[str, object]:
-    """Evaluate fallback coverage and throughput without ground-truth claims."""
+def evaluate(
+    source: Path,
+    *,
+    maximum_seconds: float,
+    sampling_fps: float,
+    backend_name: str = "opencv-cpu",
+    model_path: Path | None = None,
+) -> dict[str, object]:
+    """Evaluate backend coverage and throughput without ground-truth claims."""
 
     capture = cv2.VideoCapture(str(source))
     if not capture.isOpened():
@@ -76,14 +85,15 @@ def evaluate(source: Path, *, maximum_seconds: float, sampling_fps: float) -> di
         height,
         source_fps,
     )
-    backend = OpenCVTrackingBackend()
-    backend.load(ModelConfig())
+    backend = _backend(backend_name)
+    model_config = ModelConfig(model_path=None if model_path is None else str(model_path))
     started = monotonic()
     result = TrackingOrchestrator(
         backend,
         OpenCVTrackingFrameSource(source, sampling_fps=sampling_fps),
         _Observations(),
         _Prompts(),
+        model_config=model_config,
     ).track_segment(segment)
     elapsed = monotonic() - started
     backend.unload()
@@ -93,6 +103,7 @@ def evaluate(source: Path, *, maximum_seconds: float, sampling_fps: float) -> di
     }
     return {
         "source": str(source),
+        "backend": backend_name,
         "source_duration_seconds": duration,
         "evaluated_duration_seconds": evaluated_duration,
         "sampling_fps": sampling_fps,
@@ -108,11 +119,21 @@ def evaluate(source: Path, *, maximum_seconds: float, sampling_fps: float) -> di
     }
 
 
+def _backend(name: str) -> TrackingBackend:
+    if name == "mlx-sam3":
+        return MLXSam3ImageBackend()
+    if name == "opencv-cpu":
+        return OpenCVTrackingBackend()
+    raise ValueError(f"Unsupported tracking backend: {name}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO)
     parser.add_argument("--maximum-seconds", type=float, default=30)
     parser.add_argument("--sampling-fps", type=float, default=10)
+    parser.add_argument("--backend", choices=("opencv-cpu", "mlx-sam3"), default="opencv-cpu")
+    parser.add_argument("--model-path", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not args.video.exists():
@@ -122,6 +143,8 @@ def main() -> int:
         args.video,
         maximum_seconds=args.maximum_seconds,
         sampling_fps=args.sampling_fps,
+        backend_name=args.backend,
+        model_path=args.model_path,
     )
     payload = json.dumps(report, indent=2, sort_keys=True)
     print(payload)

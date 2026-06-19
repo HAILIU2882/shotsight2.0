@@ -10,6 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 from shotsight2.domain.tracking import (
     BoundingBox,
     CameraSegmentInput,
+    ModelConfig,
     PromptKind,
     PromptSource,
     TrackedObjectClass,
@@ -71,15 +72,22 @@ class TrackingOrchestrator:
         prompts: TrackingPromptRepository,
         *,
         quality: TrackingQualityConfig | None = None,
+        model_config: ModelConfig | None = None,
     ) -> None:
         self._backend = backend
         self._frame_source = frame_source
         self._observations = observations
         self._prompts = prompts
         self._quality = quality or TrackingQualityConfig()
+        self._model_config = model_config or ModelConfig()
+        self._backend_loaded = False
 
     def track_segment(self, segment: CameraSegmentInput) -> SegmentTrackingResult:
         """Track one segment with no state inherited from another viewpoint."""
+
+        if not self._backend_loaded:
+            self._backend.load(self._model_config)
+            self._backend_loaded = True
 
         automatic = automatic_tracking_prompts(segment)
         saved = tuple(self._prompts.list_for_segment(segment.id))

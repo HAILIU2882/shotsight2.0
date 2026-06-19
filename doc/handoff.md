@@ -44,7 +44,7 @@ The following modules are complete on `main`:
 
 The following modules are partially complete or blocked:
 
-- Tracking: OpenCV fallback and interfaces are implemented; real MLX/SAM validation is blocked by missing authorized local model/runtime.
+- Tracking: OpenCV fallback and Apple Silicon MLX SAM 3 image inference are implemented and benchmarked; accuracy still needs ground-truth labels.
 - Shot Lifecycle: implementation and tests are complete; real-video precision/recall benchmark is blocked by missing ground-truth shot-event labels.
 - Outcome Classification: implementation and tests are complete; real-video accuracy/calibration benchmark is blocked by missing ground-truth make/miss labels.
 
@@ -195,7 +195,7 @@ Run the same gates again on `main` after merging.
 
 Current formal blockers are tracked in `doc/reports/blocked.md`:
 
-- Real MLX/SAM tracking validation requires authorized local model/runtime.
+- Official SAM 3.1 CUDA tracking validation still requires a compatible NVIDIA host.
 - Shot lifecycle precision/recall requires ground-truth shot-event labels.
 - Outcome classification accuracy/calibration requires ground-truth make/miss labels.
 - Artifact Rendering real-video visual regression requires approved baseline snapshots.

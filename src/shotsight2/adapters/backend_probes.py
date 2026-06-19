@@ -110,11 +110,11 @@ def _create_mlx_probe(
         text_prompts=True,
         point_prompts=True,
         box_prompts=True,
-        mask_prompts=True,
+        mask_prompts=False,
         native_video_memory=False,
         multi_object_tracking=True,
         batch_support=True,
-        mask_output=True,
+        mask_output=False,
         supported_devices=(DeviceType.APPLE_SILICON,),
         maximum_recommended_resolution=(1008, 1008),
     )
@@ -127,25 +127,26 @@ def _create_mlx_probe(
                 capabilities,
                 "MLX requires an Apple Silicon macOS host.",
             )
-        if not finder("mlx") or not finder("mlx_sam3"):
+        if tuple(int(part) for part in system.python_version.split(".")[:2]) < (3, 13):
             return _unavailable(
                 TrackingBackendName.MLX_SAM3,
                 "MLX SAM 3 Image + temporal tracker",
                 capabilities,
-                "The optional 'mlx' and 'mlx_sam3' packages are not both installed.",
+                "The installed MLX SAM 3 port requires Python 3.13 or newer.",
             )
-        model_error = _model_error(config.mlx_model_path, "MLX SAM 3")
-        if model_error is not None:
+        if not finder("mlx") or not finder("sam3"):
             return _unavailable(
                 TrackingBackendName.MLX_SAM3,
                 "MLX SAM 3 Image + temporal tracker",
                 capabilities,
-                model_error,
+                "The optional 'mlx' framework and MLX SAM 3 'sam3' module are not both installed.",
             )
 
         try:
             mlx_module = importer("mlx")
-            mlx_sam3_module = importer("mlx_sam3")
+            mlx_sam3_module = importer("sam3")
+            if not callable(getattr(mlx_sam3_module, "build_sam3_image_model", None)):
+                raise RuntimeError("the installed 'sam3' module is not the supported MLX image port")
         except Exception as error:
             return _unhealthy(
                 TrackingBackendName.MLX_SAM3,
@@ -160,15 +161,18 @@ def _create_mlx_probe(
             display_name="MLX SAM 3 Image + temporal tracker",
             state=BackendHealthState.READY,
             capabilities=capabilities,
-            reason="Apple Silicon, MLX runtime, and local model are ready.",
+            reason="Apple Silicon and the MLX SAM 3 runtime are ready; weights download on first model load.",
             version=version,
-            model=config.mlx_model_path.name if config.mlx_model_path else None,
+            model=config.mlx_model_path.name if config.mlx_model_path else "mlx-community/sam3-image",
             device=BackendDevice(
                 device_type=DeviceType.APPLE_SILICON,
                 name=f"Apple Silicon ({system.architecture})",
                 memory_bytes=system.total_memory_bytes,
             ),
-            configuration=_path_configuration("model_path", config.mlx_model_path),
+            configuration={
+                **_path_configuration("model_path", config.mlx_model_path),
+                "auto_download_weights": config.mlx_model_path is None,
+            },
         )
 
     return probe

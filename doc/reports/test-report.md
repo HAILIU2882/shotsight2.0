@@ -216,9 +216,8 @@ and baseline formatting before its module can pass the quality gate.
   - Observation counts: basketball 300, rim 300, player 0.
   - Ground truth was unavailable, so these metrics validate runnable processing
     and reporting, not real-world tracking accuracy.
-- Blocked validation remains for real MLX SAM 3 Image execution and MLX
-  inter-frame benchmarking because optional packages `mlx_sam3` and `sam3` are
-  not installed and no authorized local runtime bridge or weights are present.
+- At the time of this 2026-06-17 run, real MLX execution was blocked. This
+  historical result is superseded by the 2026-06-20 MLX integration entry below.
 
 ### Track Association
 
@@ -502,9 +501,8 @@ and baseline formatting before its module can pass the quality gate.
   `curl -i http://127.0.0.1:4173/videos/video-3479fe147f334a3684b8f89d37efa5a5`
   returned HTTP 200 with `content-type: text/html; charset=utf-8` and rendered
   the uploaded `bball_pt2.mov` detail page.
-- Remaining release blockers observed during this pass:
-  - `mlx_sam3` unavailable.
-  - `sam3` unavailable.
+- Remaining release blockers observed during this 2026-06-19 pass:
+  - MLX was unavailable at that time; resolved by the 2026-06-20 integration.
   - Docker CLI available, but `colima status` still reports
     `colima is not running`.
 
@@ -524,7 +522,19 @@ and baseline formatting before its module can pass the quality gate.
 - Added on 2026-06-19 in `doc/reports/requirements-traceability.md`.
 - The matrix maps product requirement areas to implementation evidence and
   explicitly identifies blocked or deferred requirements.
-- Result: no requirement is silently omitted, but the release gate remains
-  unchecked because MLX/SAM validation, ground-truth benchmark labels,
-  visual-render baselines, Docker/Colima smoke, and Windows/Linux smoke are not
-  complete.
+- Result: no requirement is silently omitted. After the 2026-06-20 MLX
+  integration, the release gate remains unchecked for ground-truth benchmark
+  labels, visual-render baselines, Docker/Colima smoke, and Windows/Linux smoke.
+
+### Apple Silicon MLX SAM 3 Integration
+
+- Completed on 2026-06-20 using Python 3.13.12 and `mlx-sam3` 0.1.0 on Apple Silicon.
+- Added a concrete, lazily imported MLX runtime that adapts upstream image detections into ShotSight sessions, prompts, observations, confidence, provenance, and segment metrics.
+- Added spatial inter-frame association and point-to-box prompt adaptation because the upstream MLX image port has no native video memory or point-prompt method.
+- Corrected backend discovery from the nonexistent `mlx_sam3` import to the upstream `sam3` module and allowed documented first-run weight download from `mlx-community/sam3-image`.
+- Added reproducible `scripts/setup-mlx.sh` and `scripts/run-mlx.sh`. Setup uses an ignored pinned editable checkout because the upstream wheel omits its tokenizer asset.
+- Real app health smoke in `.venv-mlx`: HTTP 200, selected backend `mlx-sam3`, backend state `ready`.
+- Real model smoke loaded the public 3.5 GB weights and processed uploaded basketball frames. A 17-frame scan produced compact basketball detections with confidence up to 0.86.
+- Repeatable five-second benchmark: 10 sampled frames, 10.03 seconds elapsed, 1.00 processing FPS, 0.6 ball coverage, six basketball observations, and zero reported identity switches.
+- Full validation: 446 tests passed with 91.83% total coverage; strict mypy passed for 149 source files; Ruff lint and format checks passed; `git diff --check` passed.
+- No ground-truth ball labels exist yet, so this closes runtime implementation and execution tasks without claiming tracking accuracy.

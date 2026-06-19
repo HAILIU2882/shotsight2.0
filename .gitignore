@@ -25,3 +25,6 @@ data/models/*
 worktrees/*
 !worktrees/.gitkeep
 !worktrees/README.md
+
+# Optional local model source checkouts are installed into dedicated environments.
+vendor/

@@ -12,6 +12,7 @@ from shotsight2.adapters.backend_probes import (
 )
 from shotsight2.adapters.ffmpeg import FFmpegAdapter
 from shotsight2.adapters.filesystem import ArtifactStoreRoots, FileSystemArtifactStore
+from shotsight2.adapters.mlx_sam3 import MLXSam3ImageBackend
 from shotsight2.adapters.opencv import OpenCVTrackingBackend, OpenCVTrackingFrameSource
 from shotsight2.adapters.persistence import (
     SQLiteAnalysisRunRepository,
@@ -48,7 +49,9 @@ from shotsight2.api.routers.health import (
     get_system_profile,
 )
 from shotsight2.config import Settings, settings
-from shotsight2.domain.tracking_backends import SystemProfile
+from shotsight2.domain.tracking import ModelConfig
+from shotsight2.domain.tracking_backends import SystemProfile, TrackingBackendName
+from shotsight2.ports.tracking import TrackingBackend
 from shotsight2.services import (
     AnalysisJobService,
     CalibrationService,
@@ -168,10 +171,19 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
     statistics = StatisticsService(attempts, players)
     review = ReviewService(corrections, attempts, players, statistics)
     tracking = TrackingOrchestrator(
-        backend=OpenCVTrackingBackend(),
+        backend=_tracking_backend(application_settings),
         frame_source=OpenCVTrackingFrameSource(data_dir / "runtime-tracking-source.mp4"),
         observations=observations,
         prompts=prompts,
+        model_config=ModelConfig(
+            model_path=(
+                str(application_settings.mlx_model_path)
+                if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value
+                and application_settings.mlx_model_path is not None
+                else None
+            ),
+            device="mps" if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value else "cpu",
+        ),
     )
 
     return LocalRuntime(
@@ -186,6 +198,14 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
         review=review,
         tracking=tracking,
     )
+
+
+def _tracking_backend(application_settings: Settings) -> TrackingBackend:
+    """Construct the configured backend without loading optional model weights."""
+
+    if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value:
+        return MLXSam3ImageBackend()
+    return OpenCVTrackingBackend()
 
 
 def _sqlite_path(database_url: str, data_dir: Path) -> Path:

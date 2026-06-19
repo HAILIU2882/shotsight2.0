@@ -23,8 +23,32 @@ status.
 - Optional SAM/MLX model runtimes and authorized weights for advanced tracking
   validation.
 
-The OpenCV fallback path and backend interfaces are implemented. Real MLX/SAM
-benchmark validation remains blocked without the optional runtime/weights.
+The OpenCV fallback and Apple Silicon MLX SAM 3 paths are implemented. Official
+SAM 3.1 CUDA validation remains optional and requires a compatible NVIDIA host.
+
+### Apple Silicon MLX SAM 3
+
+The MLX port requires Python 3.13, so it uses a dedicated environment rather
+than the default Python 3.12 `.venv`. Set it up and run ShotSight with:
+
+```sh
+./scripts/setup-mlx.sh
+./scripts/run-mlx.sh
+```
+
+The first real inference downloads approximately 3.5 GB of public weights from
+`mlx-community/sam3-image`. The installed distribution is named `mlx-sam3`,
+but its Python import is `sam3`; ShotSight's backend probe accounts for that
+upstream naming difference. The setup script keeps a pinned, ignored checkout
+under `vendor/mlx_sam3` because the upstream wheel currently omits a required
+tokenizer asset. Python 3.13 can skip executable editable-install hooks inside
+the Finder-hidden `.venv-mlx`, so the setup validation and run script export
+the project `src` directory and pinned MLX source explicitly. This makes imports
+reliable from outside the repository without depending on `.pth` processing.
+Neither the ignored checkout nor downloaded model weights are committed. Rerun
+setup after moving the repository or changing dependencies.
+The MLX port performs image inference on sampled video frames, while ShotSight
+owns temporal identity and trajectory filtering.
 
 ## Local Setup
 

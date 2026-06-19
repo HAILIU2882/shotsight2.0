@@ -22,8 +22,8 @@ repositories.
 - [x] `TRK-008` Add basketball motion, size, continuity, and body-overlap plausibility checks.
 - [x] `TRK-009` Accept saved user point/box prompts at a timestamp.
 - [x] `TRK-010` Reset all session state at camera-segment boundaries.
-- [ ] `TRK-011` Implement MLX SAM 3 Image keyframe detection adapter. Lazy adapter boundary is implemented; real keyframe inference is blocked because `mlx_sam3` is not installed and no local authorized model bridge is available.
-- [ ] `TRK-012` Implement and benchmark a lightweight inter-frame tracker for the MLX backend. OpenCV fallback was benchmarked; MLX benchmark is blocked until `TRK-011` has a real runtime.
+- [x] `TRK-011` Implement MLX SAM 3 Image keyframe detection adapter.
+- [x] `TRK-012` Implement and benchmark a lightweight inter-frame tracker for the MLX backend.
 - [x] `TRK-013` Implement the official SAM 3.1 video adapter behind optional imports.
 - [x] `TRK-014` Implement the OpenCV/lightweight fallback adapter.
 - [x] `TRK-015` Add backend contract tests and representative-video evaluation scripts.
@@ -56,3 +56,12 @@ repositories.
   - Occlusion events: 0.
   - Observation counts: basketball 300, rim 300, player 0.
   - Ground truth: unavailable, so this validates runnable metrics and pipeline behavior, not real tracking accuracy.
+- Representative MLX SAM 3 evaluation on Apple Silicon:
+  - Runtime: Python 3.13.12, `mlx-sam3` 0.1.0, public `mlx-community/sam3-image` weights.
+  - Fresh-process setup validation: explicit source paths avoid Python 3.13's skipped editable hooks; `import shotsight2` and `import sam3` succeed outside the project directory, and the tokenizer asset is present.
+  - Backend/app health smoke: the Python 3.13 MLX environment reports `mlx-sam3` ready and selected through `GET /health` without loading model weights.
+  - Command: `PYTHONPATH=src .venv-mlx/bin/python scripts/evaluate_tracking.py --video data/uploads/video-3479fe147f334a3684b8f89d37efa5a5/original.mp4 --backend mlx-sam3 --maximum-seconds 5 --sampling-fps 2`.
+  - Evaluated frames: 10 over 5 seconds; elapsed time: 10.03 seconds; processing rate: 1.00 FPS.
+  - Ball track coverage: 0.6; basketball observations: 6; identity switches: 0.
+  - A separate 17-frame diagnostic scan found compact basketball boxes with confidence up to 0.86.
+  - Ground truth remains unavailable, so these metrics validate real execution, throughput, and observation plumbing rather than an accuracy claim.

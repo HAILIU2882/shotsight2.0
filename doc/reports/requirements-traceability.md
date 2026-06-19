@@ -26,7 +26,7 @@ document, not a replacement for the detailed design.
 | Calibration and correction | Implemented | `src/shotsight2/services/calibration.py`, `tests/calibration`, presentation/API routes |
 | Tracking backend selection | Implemented | `src/shotsight2/adapters/backend_probes.py`, `tests/test_tracking_backend_selection.py` |
 | OpenCV fallback tracking | Implemented | `src/shotsight2/adapters/opencv/tracking.py`, `tests/tracking` |
-| MLX SAM 3 Image backend validation | Blocked | Optional runtime/weights unavailable; see `doc/reports/blocked.md` |
+| MLX SAM 3 Image backend validation | Implemented | `src/shotsight2/adapters/mlx_sam3.py`, `tests/tracking/test_mlx_sam3.py`, and the representative-video benchmark in `doc/tasks/tracking.md` |
 | Official SAM 3.1 video backend validation | Blocked | Optional runtime/weights unavailable; see `doc/reports/blocked.md` |
 | Ball/rim/player track persistence | Implemented | `src/shotsight2/domain/tracking.py`, `src/shotsight2/adapters/persistence/repositories.py`, `tests/tracking` |
 | Player association and shooter attribution | Implemented | `src/shotsight2/services/track_association.py`, `tests/track_association` |
@@ -38,16 +38,16 @@ document, not a replacement for the detailed design.
 | Statistics and shot summaries | Implemented | `src/shotsight2/services/statistics.py`, `tests/statistics` |
 | Complete video deletion | Implemented | `src/shotsight2/services/deletion.py`, `tests/deletion`, `tests/e2e/test_local_workflow.py` |
 | Bilingual English/Chinese UI | Implemented | `src/shotsight2/presentation/i18n`, `tests/presentation` |
-| End-to-end local workflow | Implemented | `tests/e2e/test_local_workflow.py` |
+| End-to-end local workflow | Incomplete | Existing `tests/e2e/test_local_workflow.py` simulates analysis publication; no production worker handler or concrete stage composition exists yet |
 | macOS native smoke | Implemented | `doc/reports/test-report.md` macOS native app smoke entry |
 | Docker/Colima smoke | Blocked | Colima daemon not running; see `doc/reports/blocked.md` |
 | Windows/Linux smoke | Deferred | Deferred by current macOS phase in `doc/prompt.md`; must not be marked complete |
 
 ## Open Release Risks
 
-- The application is not production-ready until MLX/SAM runtime validation,
-  lifecycle/outcome benchmark labels, visual-render baselines, Docker/Colima
-  smoke, and deferred cross-platform smoke tests are resolved.
+- The application is not production-ready until lifecycle/outcome benchmark
+  labels, visual-render baselines, Docker/Colima smoke, and deferred
+  cross-platform smoke tests are resolved.
 - Current automated tests prove local service, API, presentation, and fallback
   workflow behavior, but do not prove 90-100% real-video tracking/counting
   accuracy.

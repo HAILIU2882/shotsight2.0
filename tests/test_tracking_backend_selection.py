@@ -27,7 +27,7 @@ from shotsight2.services.tracking_backend_selection import (
     build_backend_capability_status,
 )
 
-APPLE = SystemProfile("Darwin", "arm64", "3.12.0", 64 * 1024**3)
+APPLE = SystemProfile("Darwin", "arm64", "3.13.0", 64 * 1024**3)
 LINUX = SystemProfile("Linux", "x86_64", "3.12.0", 32 * 1024**3)
 TEST_CPU_DEVICE = BackendDevice(DeviceType.CPU, "Test CPU")
 
@@ -60,7 +60,7 @@ def test_apple_silicon_selects_ready_mlx_backend(tmp_path: Path) -> None:
     model_path.mkdir()
     modules = {
         "mlx": _module("mlx", "0.30.0"),
-        "mlx_sam3": _module("mlx_sam3", "0.1.0"),
+        "sam3": _mlx_sam3_module(),
     }
     registry = create_default_registry(
         BackendProbeConfig(mlx_model_path=model_path),
@@ -74,11 +74,29 @@ def test_apple_silicon_selects_ready_mlx_backend(tmp_path: Path) -> None:
     assert selection.selected.device is not None
     assert selection.selected.device.device_type is DeviceType.APPLE_SILICON
     assert selection.fallback_reasons == ()
+    assert selection.selected.configuration is not None
+    assert selection.selected.configuration["auto_download_weights"] is False
 
 
-def test_apple_silicon_falls_back_to_cpu_when_mlx_model_is_missing() -> None:
-    """A missing MLX model should produce a visible CPU fallback reason."""
-    modules = {"mlx", "mlx_sam3", "cv2"}
+def test_apple_silicon_uses_mlx_with_automatic_weight_download() -> None:
+    """The supported port downloads its public MLX weights on first model load."""
+    modules = {"mlx": _module("mlx", "0.30.0"), "sam3": _mlx_sam3_module(), "cv2": _module("cv2", "4.11.0")}
+    registry = create_default_registry(
+        BackendProbeConfig(),
+        module_finder=lambda name: name in modules,
+        module_importer=modules.__getitem__,
+    )
+
+    selection = TrackingBackendSelector(registry).select(APPLE)
+
+    assert selection.selected.name is TrackingBackendName.MLX_SAM3
+    assert selection.selected.model == "mlx-community/sam3-image"
+    assert selection.selected.configuration == {"auto_download_weights": True}
+
+
+def test_apple_silicon_falls_back_to_cpu_when_mlx_module_is_missing() -> None:
+    """A missing MLX SAM module should produce a visible CPU fallback reason."""
+    modules = {"mlx", "cv2"}
     cv2_module = _module("cv2", "4.11.0")
     registry = create_default_registry(
         BackendProbeConfig(),
@@ -89,7 +107,7 @@ def test_apple_silicon_falls_back_to_cpu_when_mlx_model_is_missing() -> None:
     selection = TrackingBackendSelector(registry).select(APPLE)
 
     assert selection.selected.name is TrackingBackendName.OPENCV_CPU
-    assert "model path is not configured" in selection.fallback_reasons[0]
+    assert "MLX SAM 3 'sam3' module" in selection.fallback_reasons[0]
     record = selection.to_analysis_record({"sampling_fps": 12})
     assert record.backend_name == "opencv-cpu"
     assert record.backend_version == "4.11.0"
@@ -145,7 +163,7 @@ def test_unhealthy_preferred_backend_falls_back_with_reason() -> None:
     """An import failure is unhealthy, visible, and does not block CPU fallback."""
     registry = create_default_registry(
         BackendProbeConfig(mlx_model_path=Path(__file__)),
-        module_finder=lambda name: name in {"mlx", "mlx_sam3", "cv2"},
+        module_finder=lambda name: name in {"mlx", "sam3", "cv2"},
         module_importer=lambda name: (
             (_ for _ in ()).throw(RuntimeError("broken Metal runtime")) if name == "mlx" else _module(name, "4.11.0")
         ),
@@ -229,6 +247,12 @@ class _FakeCuda:
 
 def _module(name: str, version: str | None = None) -> ModuleType:
     return ModuleType(name) if version is None else _VersionedModule(name, version)
+
+
+def _mlx_sam3_module() -> ModuleType:
+    module = _VersionedModule("sam3", "0.1.0")
+    module.build_sam3_image_model = lambda: object()  # type: ignore[attr-defined]
+    return module
 
 
 class _VersionedModule(ModuleType):

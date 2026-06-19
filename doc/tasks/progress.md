@@ -29,7 +29,7 @@
 
 - [x] [Camera Segment](camera-segment.md)
 - [x] [Calibration](calibration.md)
-- [ ] [Tracking](tracking.md)
+- [x] [Tracking](tracking.md)
 - [x] [Track Association](track-association.md)
 - [ ] [Shot Lifecycle](shot-lifecycle.md)
 - [ ] [Outcome Classification](outcome-classification.md)
@@ -42,7 +42,7 @@
 ## Overall Release Gates
 
 - [ ] All 22 module checklists are complete.
-- [x] End-to-end upload, analysis, review, reanalysis, and deletion tests pass.
+- [ ] End-to-end upload, analysis, review, reanalysis, and deletion tests pass. Existing coverage uses simulated analysis publication; a live production worker/pipeline test is required.
 - [ ] Vision benchmark metrics are documented for every supported backend.
 - [ ] macOS, Windows, and Linux installation smoke tests pass.
 - [ ] The requirements traceability matrix has no unimplemented requirement.

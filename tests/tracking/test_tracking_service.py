@@ -72,6 +72,7 @@ class _Backend:
     def __init__(self) -> None:
         self.sessions: list[str] = []
         self.segment_ids: list[str] = []
+        self.loads: list[ModelConfig] = []
 
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
@@ -87,7 +88,7 @@ class _Backend:
         )
 
     def load(self, model_config: ModelConfig) -> None:
-        del model_config
+        self.loads.append(model_config)
 
     def start_segment(
         self,
@@ -140,6 +141,7 @@ def test_each_camera_segment_gets_a_completely_new_session() -> None:
 
     assert backend.sessions == ["session-0", "session-1"]
     assert backend.segment_ids == ["segment-1", "segment-2"]
+    assert backend.loads == [ModelConfig()]
 
 
 def test_saved_repair_prompt_requires_user_point_or_box() -> None:
