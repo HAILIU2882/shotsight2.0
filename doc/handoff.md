@@ -125,6 +125,84 @@ Use:
 - `doc/detailed-design.md`
 - `doc/prompt.md`
 
+## Subagent Setup Instructions
+
+The next AI agent should continue using the multi-agent workflow described in
+`doc/prompt.md`.
+
+Main agent responsibilities:
+
+- Keep `main` as the integration branch.
+- Read `doc/proposal.md`, `doc/detailed-design.md`, `doc/prompt.md`, and the
+  target module file in `doc/tasks/` before assigning work.
+- Create one branch and one worktree per module or per corrective task.
+- Delegate implementation to a subagent when subagents are available.
+- Review every subagent branch before merge.
+- Run the full quality gates before and after merge.
+- Update progress/report documents only when the evidence supports it.
+
+Subagent responsibilities:
+
+- Work only inside its assigned worktree.
+- Implement the whole assigned module checklist or clearly mark blockers.
+- Add pytest coverage for the new behavior.
+- Keep code compatible with `mypy --strict`, `ruff check`, and
+  `ruff format --check`.
+- Update the module task file as checklist items are completed.
+- Update `doc/reports/test-report.md` with exact validation commands/results.
+- Update `doc/reports/blocked.md` if any task cannot be completed.
+- Create one module commit with an English commit message.
+
+Recommended worktree pattern:
+
+```sh
+cd /Users/hailiu/Desktop/Projects/shotsight2.0
+git worktree add ../shotsight2-worktrees/<module-name> -b codex/<module-name> main
+```
+
+Recommended subagent prompt template:
+
+```text
+You are implementing the <Module Name> module for ShotSight 2.0.
+
+Workspace:
+/Users/hailiu/Desktop/Projects/shotsight2-worktrees/<module-name>
+
+Read first:
+- doc/proposal.md
+- doc/detailed-design.md
+- doc/prompt.md
+- doc/tasks/<module-name>.md
+- doc/tasks/progress.md
+- doc/reports/blocked.md
+- doc/reports/test-report.md
+
+Rules:
+- Work only in this worktree and branch codex/<module-name>.
+- Complete the smallest executable tasks listed in doc/tasks/<module-name>.md.
+- Add or update pytest tests for every behavior.
+- Run:
+  PYTHONPATH=src .venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80
+  PYTHONPATH=src .venv/bin/mypy --strict src tests
+  .venv/bin/ruff check src tests scripts
+  .venv/bin/ruff format --check src tests scripts
+  git diff --check main...HEAD
+- Update doc/tasks/<module-name>.md as items are completed.
+- Update doc/reports/test-report.md with exact commands and results.
+- If blocked, update doc/reports/blocked.md and continue any unblocked work.
+- Commit with one English commit message when complete.
+- Do not merge into main. The main agent will review and merge.
+```
+
+Parallelism guidance:
+
+- Artifact Rendering should be fixed and merged before starting Review.
+- Review can start before Application API and Presentation.
+- Analysis Pipeline Orchestrator should wait until Artifact Rendering and
+  Review are merged.
+- Application API should wait until the orchestrator is available.
+- Presentation should wait until Application API has stable routes.
+
 ## Progress Update Rules
 
 For each module:
