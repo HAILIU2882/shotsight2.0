@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.card.filename }}{% endblock %}
+{% block content %}
+<p><a href="/?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ detail.card.filename }}</h1>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>{{ t('detail.title', locale) }}</h2>
+    <table>
+      <tr><th>{{ t('detail.filename', locale) }}</th><td>{{ detail.card.filename }}</td></tr>
+      <tr><th>{{ t('detail.duration', locale) }}</th><td>{{ "%.1f"|format(detail.card.duration_seconds) }}s</td></tr>
+      <tr><th>{{ t('detail.resolution', locale) }}</th><td>{{ detail.card.width }}×{{ detail.card.height }}</td></tr>
+      <tr><th>{{ t('detail.fps', locale) }}</th><td>{{ detail.card.fps | round(2) }}</td></tr>
+      <tr><th>{{ t('detail.codec', locale) }}</th><td>{{ detail.card.codec }}</td></tr>
+      <tr>
+        <th>{{ t('detail.status', locale) }}</th>
+        <td>
+          {% set st = detail.card.analysis.state | lower %}
+          <span class="status-badge status-{{ st }}">{{ t('status.' + st, locale) }}</span>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('detail.analyze', locale) }}</h2>
+    {% set st = detail.card.analysis.state %}
+    {% if st in ('RUNNING', 'QUEUED') %}
+    <div id="progress-area" data-video-id="{{ detail.card.video_id }}" data-locale="{{ locale }}">
+      <p>{{ t('status.' + st | lower, locale) }}</p>
+      {% if detail.card.analysis.progress is not none %}
+      <div class="progress-bar-wrap" role="progressbar" aria-valuenow="{{ (detail.card.analysis.progress * 100)|round|int }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar" style="width:{{ (detail.card.analysis.progress * 100)|round|int }}%"></div>
+      </div>
+      <p style="font-size:0.85rem;color:#6b7280">{{ t('progress.percent', locale, pct=(detail.card.analysis.progress * 100)|round|int) }}</p>
+      {% endif %}
+      <p class="hint">{{ t('progress.polling', locale) }}</p>
+      <meta http-equiv="refresh" content="5">
+    </div>
+    {% elif st == 'COMPLETED' %}
+    <p class="alert alert-success">{{ t('progress.done', locale) }}</p>
+    <form method="post" action="/videos/{{ detail.card.video_id }}/reanalyze?locale={{ locale }}">
+      <div class="form-group">
+        <label>{{ t('analysis.backend_name', locale) }}
+          <input type="text" name="backend_name" value="opencv-cpu" required>
+        </label>
+      </div>
+      <div class="form-group">
+        <label>{{ t('analysis.backend_version', locale) }}
+          <input type="text" name="backend_version" value="0.1.0" required>
+        </label>
+      </div>
+      <button class="btn btn-secondary" type="submit">{{ t('detail.reanalyze', locale) }}</button>
+    </form>
+    {% elif st == 'FAILED' %}
+    <div class="alert alert-error">{{ t('progress.failed', locale, reason=detail.card.analysis.failure.message if detail.card.analysis.failure else '') }}</div>
+    {% else %}
+    <form method="post" action="/videos/{{ detail.card.video_id }}/analyze?locale={{ locale }}">
+      <div class="form-group">
+        <label>{{ t('analysis.backend_name', locale) }}
+          <input type="text" name="backend_name" value="opencv-cpu" required>
+        </label>
+      </div>
+      <div class="form-group">
+        <label>{{ t('analysis.backend_version', locale) }}
+          <input type="text" name="backend_version" value="0.1.0" required>
+        </label>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('detail.analyze', locale) }}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if detail.card.analysis.state == 'COMPLETED' %}
+<div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem">
+  <a class="btn btn-secondary" href="/videos/{{ detail.card.video_id }}/calibration?locale={{ locale }}">{{ t('calibration.title', locale) }}</a>
+  <a class="btn btn-secondary" href="/videos/{{ detail.card.video_id }}/players?locale={{ locale }}">{{ t('players.title', locale) }}</a>
+  <a class="btn btn-secondary" href="/videos/{{ detail.card.video_id }}/attempts?locale={{ locale }}">{{ t('attempts.title', locale) }}</a>
+  <a class="btn btn-secondary" href="/videos/{{ detail.card.video_id }}/statistics?locale={{ locale }}">{{ t('stats.title', locale) }}</a>
+  <a class="btn btn-secondary" href="/videos/{{ detail.card.video_id }}/tracking-repair?locale={{ locale }}">{{ t('tracking.title', locale) }}</a>
+</div>
+{% endif %}
+
+{% if detail.runs %}
+<div class="card">
+  <h2>{{ t('detail.runs', locale) }}</h2>
+  <table>
+    <thead><tr>
+      <th>Run ID</th><th>{{ t('detail.status', locale) }}</th><th>{{ t('analysis.backend_name', locale) }}</th>
+    </tr></thead>
+    <tbody>
+    {% for run in detail.runs %}
+    <tr>
+      <td style="font-size:0.8rem;font-family:monospace">{{ run.run_id }}</td>
+      <td><span class="status-badge status-{{ run.status | lower }}">{{ run.status }}</span></td>
+      <td>{{ run.backend_name }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="hint">{{ t('detail.no_runs', locale) }}</p>
+{% endif %}
+
+{% if detail.artifacts %}
+<div class="card">
+  <h2>{{ t('detail.artifacts', locale) }}</h2>
+  <ul style="list-style:none;font-size:0.85rem">
+  {% for art in detail.artifacts %}
+    <li style="margin-bottom:0.4rem"><a href="/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.artifact_id }}</a> ({{ art.kind }})</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div style="margin-top:2rem">
+  <a class="btn btn-danger" href="/videos/{{ detail.card.video_id }}/delete?locale={{ locale }}">{{ t('detail.delete', locale) }}</a>
+</div>
+{% endblock %}

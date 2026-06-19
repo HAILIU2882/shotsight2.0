@@ -13,6 +13,9 @@ Last updated: 2026-06-19
 
 `main` is clean and pushed through:
 
+- `Merge Presentation module`
+- `be31278 Merge Application API module`
+- `76695dd Merge analysis pipeline orchestrator module`
 - `e6e5553 Merge outcome classification module`
 - `f39399c Merge shot lifecycle engine`
 - `6df87cc Merge track association module`
@@ -34,6 +37,10 @@ The following modules are complete on `main`:
 - Track Association
 - Court Mapping
 - Statistics
+- Review
+- Analysis Pipeline Orchestrator
+- Application API (63 tests, 94% coverage)
+- Presentation (64 tests, 96% coverage)
 
 The following modules are partially complete or blocked:
 
@@ -121,26 +128,12 @@ git push origin main
 
 ## Recommended Next Module
 
-After Artifact Rendering is merged, implement the Review module next.
+The Presentation module is now complete and merged. All planned modules are on
+`main`. The next work items are:
 
-Reason:
-
-- It depends on attempts, players, calibration/location/statistics, and generated artifacts, all of which now exist or are ready after Artifact Rendering.
-- It lets users manually correct shooter identity, shot outcome, shot type, and location before the final orchestrator and UI are wired.
-
-Expected branch/worktree:
-
-```sh
-cd /Users/hailiu/Desktop/Projects/shotsight2.0
-git worktree add worktrees/review -b codex/review main
-```
-
-Use:
-
-- `doc/tasks/review.md`
-- `doc/proposal.md`
-- `doc/detailed-design.md`
-- `doc/prompt.md`
+1. Patch the Artifact Rendering duplicate destination issue (see Active Unmerged Work above).
+2. Merge Artifact Rendering into `main`.
+3. Address formal blockers in `doc/reports/blocked.md` as resources become available.
 
 ## Subagent Setup Instructions
 

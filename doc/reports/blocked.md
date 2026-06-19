@@ -56,3 +56,23 @@
   `MADE`/`MISSED` outcomes and generated automatic predictions for the same
   attempt IDs, then run
   `scripts/evaluate_outcome_classification.py --labels ... --predictions ...`.
+
+## Artifact Rendering Real-Video Visual Regression
+
+- **Date:** 2026-06-19
+- **Module:** Artifact Rendering
+- **Blocked item:** Real-video visual-regression comparison beyond deterministic
+  overlay-frame SVG fixtures.
+- **Status:** Deterministic overlay frame regression is implemented and tested;
+  real-video snapshot comparison is blocked.
+- **Reason:** The repository does not contain approved ground-truth annotated
+  video frames or snapshot images for representative real media.
+- **Verified with:** Artifact Rendering tests compare deterministic SVG overlay
+  output from stored observations; no real-video visual baseline files are
+  present in the repository.
+- **Impact:** Rendering logic, artifact staging, metadata, localization, and
+  media encode boundaries are covered, but no claim is made that a real encoded
+  video visually matches a human-approved baseline frame.
+- **Unblock condition:** Add authorized representative source media plus
+  approved annotated-frame snapshots, then compare decoded rendered frames
+  against those baselines in the artifact rendering test suite.

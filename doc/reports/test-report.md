@@ -238,6 +238,7 @@ and baseline formatting before its module can pass the quality gate.
 ### Shot Lifecycle
 
 - Partially completed in `codex/shot-lifecycle` on 2026-06-18.
+
 - 191 tests passed with integrated coverage of 91.98%.
 - Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
   gates passed.
@@ -272,3 +273,69 @@ and baseline formatting before its module can pass the quality gate.
   and uncertainty calibration comparison interface, but benchmark metrics are
   blocked because no ground-truth outcome label file and matching prediction
   file exist.
+
+### Artifact Rendering
+
+- Completed in `codex/artifact-rendering` on 2026-06-19.
+- 216 tests passed with integrated coverage of 91.25%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed.
+- The module defines rendering artifact kinds, reproducible render
+  configuration/version identifiers, localized English/Chinese overlay labels,
+  overlay primitives and states, bounded replay windows, full annotated-video
+  rendering through the media adapter boundary, deterministic shot-chart and
+  heatmap JSON/SVG outputs, artifact-store temporary staging and promotion,
+  cleanup on encode failure, metadata artifacts, and deterministic SVG overlay
+  frame regression fixtures.
+- True real-video visual-regression comparison against approved ground-truth
+  snapshots remains blocked; deterministic overlay-frame regression is covered
+  by unit tests.
+
+### Review
+
+- Completed in `codex/review` on 2026-06-19.
+- 55 new review tests; 271 total tests passed with integrated coverage of 86.72%.
+- Full strict mypy, Ruff lint, Ruff format, coverage, and `git diff --check`
+  gates passed on both the worktree and main after merge.
+- The module defines `CorrectionField` (outcome, shooter_track_id, shot_type,
+  location, removed, review_status), an append-only `ReviewService` that
+  preserves automatic evidence and audit history, player display-name rename
+  without track-ID change, manual attempt creation with required release
+  timestamp, effective removal via `removed=True` correction, and
+  `restore_attempt` undo by new correction.
+- Review queue orders uncertain-unreviewed attempts first, then
+  low-confidence-unreviewed, then reviewed attempts, breaking ties by release
+  time.
+- Extended `ShotAttemptRepository` port and `SQLiteShotAttemptRepository`
+  adapter with `add_manual_attempt` so manually created shots appear in
+  `list_effective` projections.
+- Tests cover correction field values, queue ordering, all override operations,
+  validation errors, repeated edits, undo-by-new-correction, manual attempts,
+  removal/restore, aggregate updates, and SQLite integration paths.
+
+### Analysis Pipeline Orchestrator
+
+- Completed in `codex/analysis-pipeline` on 2026-06-19.
+- 46 new pipeline tests; 275 total tests, 267 passed with integrated coverage of 84%.
+- Full strict mypy, Ruff lint, Ruff format, and `git diff --check` gates passed.
+- The module defines `StageResult` and `PipelineContext` immutable types for
+  threading identifiers and accumulated results between stages without hidden
+  global state.
+- `AnalysisPipelineOrchestrator` accepts a sequence of `(StageSpec, PipelineStageRunner)`
+  pairs; each stage is independently injectable and replaceable without modifying
+  the orchestrator.
+- Progress is updated before and after each stage via a narrow `JobProgressPort`.
+- Stage failure stops the pipeline immediately; failure category, message, and
+  stage are persisted via `mark_failed`; temporary artifacts are cleaned with
+  `preserve_diagnostics=True`.
+- Atomic publication via `PublishPort.publish_completed` is called only after
+  all stages succeed, ensuring the prior completed run remains visible until
+  the new one is published (PIP-010).
+- Full restart after failure is handled externally by
+  `AnalysisJobService.retry_failed_job` — each pipeline invocation is isolated
+  per run with no shared mutable state between calls.
+- `DEFAULT_STAGE_SPECS` defines the 10-stage order (VALIDATING → FINALIZING)
+  with progress bounds used as the default when no custom specs are provided.
+- Tests cover success, failure at every stage index (parametrized 0–9), cleanup
+  behavior, republish ordering, context propagation, stage duration recording,
+  and `PipelineStageError` category forwarding.

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ShotSight{% endblock %} — ShotSight 2.0</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
+    a { color: #0071e3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav { background: #1d1d1f; color: #f5f5f7; padding: 0 1.5rem; display: flex; align-items: center; gap: 1.5rem; height: 3rem; }
+    nav .brand { font-weight: 700; color: #fff; }
+    nav a { color: #f5f5f7; font-size: 0.9rem; }
+    nav a:hover { color: #fff; text-decoration: none; }
+    nav .spacer { flex: 1; }
+    nav form.locale-form { display: flex; gap: 0.5rem; }
+    nav select { font-size: 0.85rem; padding: 0.2rem 0.4rem; border-radius: 4px; background: #333; color: #fff; border: 1px solid #555; cursor: pointer; }
+    main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 1.2rem; }
+    h2 { font-size: 1.25rem; margin-bottom: 0.8rem; margin-top: 1.5rem; }
+    .card { background: #fff; border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 1rem; }
+    .card h2 { margin-top: 0; }
+    .btn { display: inline-block; padding: 0.45rem 1rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; border: none; font-family: inherit; }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-primary:hover { background: #0077ed; text-decoration: none; }
+    .btn-danger { background: #ff3b30; color: #fff; }
+    .btn-danger:hover { background: #e02b20; }
+    .btn-secondary { background: #e8e8ed; color: #1d1d1f; }
+    .btn-secondary:hover { background: #ddd; }
+    .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .alert-error { background: #fff0f0; border: 1px solid #ffb3b3; color: #990000; }
+    .alert-success { background: #f0fff4; border: 1px solid #86efac; color: #166534; }
+    .alert-info { background: #f0f7ff; border: 1px solid #93c5fd; color: #1e3a5f; }
+    .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+    .status-completed { background: #d1fae5; color: #065f46; }
+    .status-running { background: #fef9c3; color: #854d0e; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+    .status-queued { background: #e0e7ff; color: #3730a3; }
+    .status-idle, .status-never_analyzed { background: #f3f4f6; color: #6b7280; }
+    .status-cancelled { background: #f3f4f6; color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid #e5e7eb; color: #6b7280; font-weight: 600; }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; }
+    tr:last-child td { border-bottom: none; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.3rem; }
+    input[type="text"], input[type="file"], select, input[type="number"] {
+      width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db;
+      border-radius: 6px; font-size: 0.9rem; font-family: inherit;
+    }
+    input:focus, select:focus { outline: 2px solid #0071e3; border-color: transparent; }
+    .hint { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
+    .progress-bar-wrap { background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden; margin: 0.5rem 0; }
+    .progress-bar { height: 100%; background: #0071e3; border-radius: 4px; transition: width 0.4s ease; }
+    .empty-state { text-align: center; padding: 3rem 1rem; color: #6b7280; }
+    .empty-state p { margin-bottom: 1rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .stat-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .stat-item { text-align: center; min-width: 80px; }
+    .stat-item .value { font-size: 1.6rem; font-weight: 700; }
+    .stat-item .label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; }
+    .low-confidence { opacity: 0.65; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+    @media (max-width: 640px) { main { padding: 0 1rem; } }
+  </style>
+</head>
+<body>
+<nav aria-label="Main navigation">
+  <span class="brand">ShotSight</span>
+  <a href="/?locale={{ locale }}">{{ t('nav.library', locale) }}</a>
+  <a href="/upload?locale={{ locale }}">{{ t('nav.upload', locale) }}</a>
+  <a href="/health">{{ t('nav.health', locale) }}</a>
+  <span class="spacer"></span>
+  <form class="locale-form" method="get" action="/preferences/language-ui" aria-label="Language selector">
+    <label for="locale-select" class="visually-hidden">Language</label>
+    <select id="locale-select" name="locale" onchange="this.form.submit()">
+      {% for loc in SUPPORTED_LOCALES %}
+      <option value="{{ loc }}" {% if loc == locale %}selected{% endif %}>{{ 'English' if loc == 'en' else '中文' }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</nav>
+<main>
+  {% if error %}
+  <div class="alert alert-error" role="alert">{{ error }}</div>
+  {% endif %}
+  {% if success %}
+  <div class="alert alert-success" role="alert">{{ success }}</div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

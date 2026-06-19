@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ t('stats.title', locale) }}{% endblock %}
+{% block content %}
+<p><a href="/videos/{{ video_id }}?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ t('stats.title', locale) }}</h1>
+{% if not stats %}
+<div class="empty-state"><p>{{ t('common.unknown', locale) }}</p></div>
+{% else %}
+<div class="card">
+  <div class="stat-row">
+    <div class="stat-item"><div class="value">{{ stats.attempts }}</div><div class="label">{{ t('stats.attempts', locale) }}</div></div>
+    <div class="stat-item"><div class="value">{{ stats.makes }}</div><div class="label">{{ t('stats.makes', locale) }}</div></div>
+    <div class="stat-item"><div class="value">{{ stats.misses }}</div><div class="label">{{ t('stats.misses', locale) }}</div></div>
+    {% if stats.shooting_percentage is not none %}
+    <div class="stat-item"><div class="value">{{ "%.0f"|format(stats.shooting_percentage * 100) }}%</div><div class="label">{{ t('stats.pct', locale) }}</div></div>
+    {% endif %}
+  </div>
+</div>
+<div class="grid-2">
+  <div class="card">
+    <h2>{{ t('stats.two_point', locale) }}</h2>
+    <div class="stat-row">
+      <div class="stat-item"><div class="value">{{ stats.two_point.attempts }}</div><div class="label">{{ t('stats.attempts', locale) }}</div></div>
+      <div class="stat-item"><div class="value">{{ stats.two_point.makes }}</div><div class="label">{{ t('stats.makes', locale) }}</div></div>
+      {% if stats.two_point.shooting_percentage is not none %}
+      <div class="stat-item"><div class="value">{{ "%.0f"|format(stats.two_point.shooting_percentage * 100) }}%</div><div class="label">{{ t('stats.pct', locale) }}</div></div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <h2>{{ t('stats.three_point', locale) }}</h2>
+    <div class="stat-row">
+      <div class="stat-item"><div class="value">{{ stats.three_point.attempts }}</div><div class="label">{{ t('stats.attempts', locale) }}</div></div>
+      <div class="stat-item"><div class="value">{{ stats.three_point.makes }}</div><div class="label">{{ t('stats.makes', locale) }}</div></div>
+      {% if stats.three_point.shooting_percentage is not none %}
+      <div class="stat-item"><div class="value">{{ "%.0f"|format(stats.three_point.shooting_percentage * 100) }}%</div><div class="label">{{ t('stats.pct', locale) }}</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% if artifacts %}
+<div class="card">
+  <h2>{{ t('detail.artifacts', locale) }}</h2>
+  <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+  {% for art in artifacts %}
+    <a class="btn btn-secondary" href="/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.kind }}</a>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ t('upload.title', locale) }}{% endblock %}
+{% block content %}
+<h1>{{ t('upload.title', locale) }}</h1>
+<div class="card" style="max-width:520px">
+  <form method="post" action="/upload?locale={{ locale }}" enctype="multipart/form-data" id="upload-form">
+    <div class="form-group">
+      <label for="file">{{ t('upload.label', locale) }}</label>
+      <input type="file" id="file" name="file" accept="video/*" required aria-required="true">
+      <p class="hint">{{ t('upload.hint', locale) }}</p>
+    </div>
+    {% if form_error %}
+    <div class="alert alert-error" role="alert">{{ form_error }}</div>
+    {% endif %}
+    <button type="submit" class="btn btn-primary" id="upload-btn">{{ t('upload.submit', locale) }}</button>
+  </form>
+  <script>
+    document.getElementById('upload-form').addEventListener('submit', function() {
+      document.getElementById('upload-btn').textContent = '{{ t("upload.uploading", locale) }}';
+      document.getElementById('upload-btn').disabled = true;
+    });
+  </script>
+</div>
+<p style="margin-top:1rem"><a href="/?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+{% endblock %}

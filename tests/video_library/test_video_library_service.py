@@ -438,6 +438,9 @@ class _AttemptRepository:
         self.write_calls += 1
         raise AssertionError("video library queries must not replace attempts")
 
+    def add_manual_attempt(self, attempt: ShotAttempt, location: ShotLocation | None = None) -> None:
+        raise AssertionError("video library queries must not add manual attempts")
+
     def list_for_run(self, run_id: str) -> list[ShotAttempt]:
         return []
 

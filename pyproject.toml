@@ -7,12 +7,13 @@ name = "shotsight2"
 version = "0.1.0"
 description = "Local-first basketball shot analysis application"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.34,<1",
   "python-multipart>=0.0.20,<1",
   "pydantic-settings>=2.8,<3",
+  "jinja2>=3.1,<4",
 ]
 
 [project.scripts]

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ t('library.title', locale) }}{% endblock %}
+{% block content %}
+<h1>{{ t('library.title', locale) }}</h1>
+{% if not videos %}
+<div class="empty-state" aria-live="polite">
+  <p>{{ t('library.empty', locale) }}</p>
+  <a class="btn btn-primary" href="/upload?locale={{ locale }}">{{ t('library.upload_cta', locale) }}</a>
+</div>
+{% else %}
+<p style="margin-bottom:1rem;color:#6b7280">{{ t('library.video_count', locale, n=videos|length) }}</p>
+<div class="grid-2">
+  {% for v in videos %}
+  <a href="/videos/{{ v.video_id }}?locale={{ locale }}" style="text-decoration:none;color:inherit">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <h2 style="font-size:1rem;margin:0;word-break:break-all">{{ v.filename }}</h2>
+      {% set st = v.analysis.state | lower %}
+      <span class="status-badge status-{{ st }}">{{ t('status.' + st, locale) }}</span>
+    </div>
+    <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem">
+      {{ "%.0f"|format(v.duration_seconds) }}s &middot; {{ v.width }}×{{ v.height }} &middot; {{ v.fps | round(1) }} fps
+    </p>
+    {% if v.statistics %}
+    <p style="font-size:0.85rem;margin-top:0.5rem">
+      {{ v.statistics.attempts }} att · {{ v.statistics.makes }} made
+      {% if v.statistics.shooting_percentage is not none %}
+       · {{ "%.0f"|format(v.statistics.shooting_percentage * 100) }}%
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+<div style="margin-top:1.5rem">
+  <a class="btn btn-primary" href="/upload?locale={{ locale }}">{{ t('nav.upload', locale) }}</a>
+</div>
+{% endblock %}

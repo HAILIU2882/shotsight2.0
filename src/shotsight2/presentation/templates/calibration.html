@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ t('calibration.title', locale) }}{% endblock %}
+{% block content %}
+<p><a href="/videos/{{ video_id }}?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ t('calibration.title', locale) }}</h1>
+{% if not segments %}
+<div class="empty-state"><p>{{ t('common.unknown', locale) }}</p></div>
+{% else %}
+{% for seg in segments %}
+<div class="card">
+  <h2>{{ t('calibration.segment', locale) }}: {{ seg.segment_id }}</h2>
+  <p class="hint">{{ "%.2f"|format(seg.start_seconds) }}s – {{ "%.2f"|format(seg.end_seconds) }}s</p>
+  <form method="post" action="/videos/{{ video_id }}/segments/{{ seg.segment_id }}/calibration?locale={{ locale }}">
+    <input type="hidden" name="segment_id" value="{{ seg.segment_id }}">
+    <input type="hidden" name="run_id" value="{{ run_id }}">
+    {% if seg.rim %}
+    <div class="form-group">
+      <label>{{ t('calibration.rim', locale) }} center X
+        <input type="number" step="0.1" name="rim_center_x" value="{{ seg.rim.center.x }}">
+      </label>
+    </div>
+    <div class="form-group">
+      <label>{{ t('calibration.rim', locale) }} center Y
+        <input type="number" step="0.1" name="rim_center_y" value="{{ seg.rim.center.y }}">
+      </label>
+    </div>
+    <div class="form-group">
+      <label>radius X <input type="number" step="0.1" name="rim_radius_x" value="{{ seg.rim.radius_x }}"></label>
+    </div>
+    <div class="form-group">
+      <label>radius Y <input type="number" step="0.1" name="rim_radius_y" value="{{ seg.rim.radius_y }}"></label>
+    </div>
+    {% else %}
+    <p class="hint">{{ t('calibration.rim', locale) }}: {{ t('common.unknown', locale) }}</p>
+    {% endif %}
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="indicative_only" value="true" {% if seg.indicative_only %}checked{% endif %}>
+        {{ t('calibration.indicative', locale) }}
+      </label>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('calibration.save', locale) }}</button>
+  </form>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

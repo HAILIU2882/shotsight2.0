@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t('deletion.title', locale) }}{% endblock %}
+{% block content %}
+<p><a href="/videos/{{ video_id }}?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ t('deletion.title', locale) }}</h1>
+<div class="card" style="max-width:520px">
+  <div class="alert alert-error" style="margin-bottom:1.25rem">
+    {{ t('deletion.warning', locale) }}
+  </div>
+  {% if artifacts %}
+  <p style="font-size:0.9rem;margin-bottom:1rem"><strong>{{ t('detail.artifacts', locale) }}:</strong> {{ artifacts|length }}</p>
+  {% endif %}
+  <form method="post" action="/videos/{{ video_id }}/confirm-delete?locale={{ locale }}">
+    <div class="form-group">
+      <label>{{ t('deletion.confirm_label', locale) }}
+        <input type="text" name="confirm_filename" required autocomplete="off"
+               aria-describedby="filename-hint">
+      </label>
+      <p class="hint" id="filename-hint">{{ filename }}</p>
+    </div>
+    <div style="display:flex;gap:0.75rem">
+      <button class="btn btn-danger" type="submit">{{ t('deletion.confirm', locale) }}</button>
+      <a class="btn btn-secondary" href="/videos/{{ video_id }}?locale={{ locale }}">{{ t('deletion.cancel', locale) }}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

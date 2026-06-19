@@ -1,8 +1,5 @@
 """FastAPI entrypoint for the ShotSight 2.0 local web application."""
 
-from dataclasses import asdict
-from typing import Any
-
 from fastapi import FastAPI
 
 from shotsight2.adapters.backend_probes import (
@@ -10,9 +7,14 @@ from shotsight2.adapters.backend_probes import (
     BackendRegistry,
     create_default_registry,
 )
+from shotsight2.api import register_routes
+from shotsight2.api.routers.health import (
+    get_backend_registry,
+    get_settings,
+    get_system_profile,
+)
 from shotsight2.config import Settings, settings
 from shotsight2.domain.tracking_backends import SystemProfile
-from shotsight2.services.tracking_backend_selection import build_backend_capability_status
 
 
 def create_app(
@@ -31,20 +33,16 @@ def create_app(
         )
     )
 
-    @application.get("/health")
-    def health() -> dict[str, Any]:
-        """Report web health and lazily evaluated tracking capabilities."""
-        backend_status = build_backend_capability_status(
-            registry,
-            system=system_profile,
-            requested_backend=application_settings.tracking_backend,
-        )
-        return {
-            "status": "ok",
-            "environment": application_settings.env,
-            "sam3_enabled": application_settings.enable_sam3,
-            "tracking": asdict(backend_status),
-        }
+    register_routes(application)
+
+    from shotsight2.presentation import register_presentation
+
+    register_presentation(application)
+
+    application.dependency_overrides[get_settings] = lambda: application_settings
+    application.dependency_overrides[get_backend_registry] = lambda: registry
+    if system_profile is not None:
+        application.dependency_overrides[get_system_profile] = lambda: system_profile
 
     return application
 

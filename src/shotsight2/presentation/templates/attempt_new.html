@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ t('attempts.new', locale) }}{% endblock %}
+{% block content %}
+<p><a href="/videos/{{ video_id }}/attempts?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ t('attempts.new', locale) }}</h1>
+<div class="card" style="max-width:480px">
+  <form method="post" action="/videos/{{ video_id }}/attempts/create?locale={{ locale }}">
+    <input type="hidden" name="run_id" value="{{ run_id }}">
+    <div class="form-group">
+      <label>{{ t('attempts.time', locale) }} (s)
+        <input type="number" step="0.01" name="release_seconds" min="0" required>
+      </label>
+    </div>
+    <div class="form-group">
+      <label>{{ t('attempts.shot_type', locale) }}
+        <input type="text" name="shot_type" value="TWO_POINT" required>
+      </label>
+    </div>
+    <div class="form-group">
+      <label>{{ t('attempts.outcome', locale) }}
+        <select name="outcome" required>
+          {% for oc in ['MADE','MISSED','UNCERTAIN'] %}
+          <option value="{{ oc }}">{{ t('outcome.' + oc, locale) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('common.save', locale) }}</button>
+  </form>
+</div>
+{% endblock %}

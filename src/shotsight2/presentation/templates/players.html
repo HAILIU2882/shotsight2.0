@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ t('players.title', locale) }}{% endblock %}
+{% block content %}
+<p><a href="/videos/{{ video_id }}?locale={{ locale }}">&larr; {{ t('common.back', locale) }}</a></p>
+<h1>{{ t('players.title', locale) }}</h1>
+{% if not players %}
+<div class="empty-state"><p>{{ t('players.no_players', locale) }}</p></div>
+{% else %}
+{% for p in players %}
+<div class="card">
+  <h2>{{ p.display_name }}</h2>
+  <div class="stat-row">
+    <div class="stat-item"><div class="value">{{ p.attempts }}</div><div class="label">{{ t('players.attempts', locale) }}</div></div>
+    <div class="stat-item"><div class="value">{{ p.makes }}</div><div class="label">{{ t('players.makes', locale) }}</div></div>
+  </div>
+  {% if p.player_track_id %}
+  <form method="post" action="/videos/{{ video_id }}/players/{{ p.player_track_id }}?locale={{ locale }}" style="display:flex;gap:0.5rem;margin-top:0.5rem">
+    <label class="visually-hidden" for="name-{{ p.player_track_id }}">{{ t('players.display_name', locale) }}</label>
+    <input id="name-{{ p.player_track_id }}" type="text" name="display_name" value="{{ p.display_name }}" style="flex:1" required>
+    <button class="btn btn-secondary" type="submit">{{ t('players.rename', locale) }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -1188,6 +1188,17 @@ class SQLiteShotAttemptRepository:
             for location in locations:
                 _upsert_location(connection, location)
 
+    def add_manual_attempt(self, attempt: ShotAttempt, location: ShotLocation | None = None) -> None:
+        """Insert a manually created attempt, optionally with an initial location."""
+        if not attempt.manual:
+            raise ValueError("Only manual attempts may be added via add_manual_attempt")
+        if location is not None and location.shot_attempt_id != attempt.id:
+            raise ValueError("Location must reference the supplied attempt")
+        with self._database.transaction() as connection:
+            _insert_attempt(connection, attempt)
+            if location is not None:
+                _upsert_location(connection, location)
+
     def list_for_run(self, run_id: str) -> list[ShotAttempt]:
         """List immutable attempt evidence in release order."""
         with self._database.read() as connection:
