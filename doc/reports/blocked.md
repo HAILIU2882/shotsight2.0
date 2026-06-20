@@ -61,28 +61,31 @@
   approved annotated-frame snapshots, then compare decoded rendered frames
   against those baselines in the artifact rendering test suite.
 
-## Docker/Colima Smoke Test
+## Resolved: Docker/Colima Smoke Test
 
 - **Date:** 2026-06-20
 - **Module:** Release Gate
-- **Blocked item:** Docker/Colima runtime smoke.
-- **Status:** Static configuration passes, and Colima started successfully, but
-  the image build and service runtime smoke did not complete.
+- **Status:** Resolved. The CPU image built and both Compose services passed
+  their runtime healthchecks.
 - **Verified environment:** Docker CLI 29.5.3; Colima using the macOS
   Virtualization Framework with an `aarch64` Docker 29.5.2 daemon; standalone
   Docker Compose 5.1.4; `docker-compose config --quiet` passed.
-- **Build attempt:** `./scripts/docker-smoke.sh` reached the Compose build and
-  failed before creating containers with
-  `docker-credential-desktop: executable file not found in $PATH`. The global
-  Docker client configuration still contains `"credsStore": "desktop"` from a
-  removed Docker Desktop installation. Compose also reported that Buildx was
-  missing; Homebrew `docker-buildx` 0.35.0 was subsequently installed, but the
-  build was not retried before runtime cleanup.
-- **Cleanup:** No Compose resources existed, and `colima stop` completed
-  successfully. No Docker or Colima command remains running for this test.
-- **Impact:** The Dockerfile and two-service Compose model are statically
-  validated, but image installation, container startup, web health, worker
-  heartbeat, and shared-volume behavior remain unverified.
-- **Unblock condition:** Remove or replace the stale Docker Desktop credential
-  helper configuration (or use an isolated Docker client configuration), start
-  Colima, and rerun `./scripts/docker-smoke.sh` through successful cleanup.
+- **Initial failure and fix:** The first isolated build succeeded, but both
+  services restarted with `MigrationError` because repository SQL migrations
+  were absent from the installed image. All six SQL files now live under the
+  installable `shotsight2/migrations` package, and `SQLiteDatabase` resolves
+  that package-relative path without depending on a Python installation
+  layout. The top-level duplicate was removed.
+- **Successful command:** `DOCKER_CONFIG=<isolated-temp-dir>
+  ./scripts/docker-smoke.sh`. The temporary Docker config contained plugin
+  discovery and no credential store; the user's global Docker config was not
+  changed.
+- **Runtime evidence:** The image installed FFmpeg, NumPy, OpenCV headless, and
+  Pillow; Hatch built and installed a wheel containing the package migration
+  resources; the `web` and standard production `shotsight-worker` containers
+  both migrated the shared database and became healthy; HTTP `/health` returned
+  200 with FFmpeg available and `opencv-cpu` selected and ready; the worker's
+  SQLite heartbeat healthcheck passed against the shared `shotsight-data`
+  volume.
+- **Cleanup:** The smoke script removed both containers, the network, and the
+  named volume. The Docker runtime release gate is no longer blocked.

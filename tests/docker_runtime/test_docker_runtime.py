@@ -9,6 +9,7 @@ def test_image_installs_cpu_vision_runtime_without_local_source_copy() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
     assert 'pip install --no-cache-dir ".[vision]"' in dockerfile
+    assert "COPY migrations" not in dockerfile
     assert "ffmpeg" in dockerfile
     assert "USER shotsight" in dockerfile
     assert "COPY . ." not in dockerfile

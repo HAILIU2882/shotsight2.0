@@ -42,7 +42,7 @@
 ## Overall Release Gates
 
 - [ ] All 22 module checklists are complete.
-- [ ] End-to-end upload, analysis, review, reanalysis, and deletion tests pass. Existing coverage uses simulated analysis publication; a live production worker/pipeline test is required.
+- [x] End-to-end upload, analysis, review, reanalysis, and deletion tests pass, including the real-adapter production worker/pipeline integration.
 - [ ] Vision benchmark metrics are documented for every supported backend.
 - [ ] macOS, Windows, and Linux installation smoke tests pass.
 - [ ] The requirements traceability matrix has no unimplemented requirement.
