@@ -70,6 +70,15 @@ Copy-Item .env.example .env
 
 Open `http://127.0.0.1:4173/health`.
 
+Both native launchers supervise two processes: the FastAPI web server and the
+independent analysis worker. Stop them together with `Ctrl-C`. For debugging,
+the equivalent manual two-terminal commands are:
+
+```sh
+PYTHONPATH=src .venv/bin/python -m shotsight2.worker
+PYTHONPATH=src .venv/bin/uvicorn shotsight2.main:app --host 127.0.0.1 --port 4173
+```
+
 Run the quality gates:
 
 ```sh

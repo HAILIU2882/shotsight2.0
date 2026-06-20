@@ -241,6 +241,42 @@ class FileSystemArtifactStore:
                 shutil.rmtree(tree)
         return inventory
 
+    def clean_run_working_files(
+        self,
+        video_id: str,
+        run_id: str,
+        *,
+        preserve_diagnostics: bool,
+    ) -> None:
+        """Clean temporaries and compensate outputs from an unpublished run.
+
+        Successful runs retain their published tree. Failed runs also remove
+        promoted outputs, while an existing reports directory may remain for
+        diagnostics.
+        """
+
+        self._validate_components((video_id, run_id))
+        temporary = self._resolve_parts(ArtifactRoot.TEMP, (video_id, run_id), require_exists=False)
+        if temporary.exists():
+            self._assert_tree_has_no_symlinks(temporary)
+            shutil.rmtree(temporary)
+        if not preserve_diagnostics:
+            return
+
+        permanent = self._resolve_parts(ArtifactRoot.RUN, (video_id, run_id), require_exists=False)
+        if not permanent.exists():
+            return
+        self._assert_tree_has_no_symlinks(permanent)
+        for child in permanent.iterdir():
+            if child.name == _RUN_DIRECTORIES[ArtifactKind.REPORT]:
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        if not any(permanent.iterdir()):
+            permanent.rmdir()
+
     def _run_id(self, kind: ArtifactKind, video_id: str, run_id: str, filename: str) -> ArtifactId:
         directory = _RUN_DIRECTORIES[kind]
         self._validate_components((video_id, run_id, filename))
