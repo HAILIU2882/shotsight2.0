@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Evaluate make/miss accuracy and uncertainty calibration when labels are available."""
+"""Evaluate outcomes while reporting and excluding UNOBSERVABLE ground truth."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 
 MAKE_MISS_OUTCOMES = {"MADE", "MISSED"}
 ALL_OUTCOMES = {"MADE", "MISSED", "UNCERTAIN"}
+GROUND_TRUTH_OUTCOMES = MAKE_MISS_OUTCOMES | {"UNOBSERVABLE"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,11 +43,17 @@ class OutcomeEvaluation:
     def to_json(self) -> dict[str, object]:
         """Return a stable JSON report."""
 
+        _ensure_unique_ids((item.attempt_id for item in self.labels), kind="label")
+        _ensure_unique_ids((item.attempt_id for item in self.predictions), kind="prediction")
         prediction_by_id = {item.attempt_id: item for item in self.predictions}
+        observable_labels = tuple(label for label in self.labels if label.outcome in MAKE_MISS_OUTCOMES)
+        unobservable_labels = tuple(label for label in self.labels if label.outcome == "UNOBSERVABLE")
         matched = tuple(
-            (label, prediction_by_id[label.attempt_id]) for label in self.labels if label.attempt_id in prediction_by_id
+            (label, prediction_by_id[label.attempt_id])
+            for label in observable_labels
+            if label.attempt_id in prediction_by_id
         )
-        missing_predictions = tuple(label for label in self.labels if label.attempt_id not in prediction_by_id)
+        missing_predictions = tuple(label for label in observable_labels if label.attempt_id not in prediction_by_id)
         label_ids = {label.attempt_id for label in self.labels}
         extra_predictions = tuple(
             prediction for prediction in self.predictions if prediction.attempt_id not in label_ids
@@ -58,7 +66,11 @@ class OutcomeEvaluation:
         incorrect = tuple((label, prediction) for label, prediction in certain if label.outcome != prediction.outcome)
         return {
             "status": "evaluated",
+            "ground_truth_attempts": len(self.labels),
             "labeled_attempts": len(self.labels),
+            "outcome_evaluable_attempts": len(observable_labels),
+            "excluded_unobservable_attempts": len(unobservable_labels),
+            "excluded_unobservable_attempt_ids": [item.attempt_id for item in unobservable_labels],
             "matched_attempts": len(matched),
             "certain_predictions": len(certain),
             "uncertain_predictions": len(uncertain),
@@ -132,8 +144,8 @@ def _records(payload: Any) -> list[dict[str, Any]]:
 def _label(record: dict[str, Any], index: int) -> OutcomeLabel:
     attempt_id = _attempt_id(record, index)
     outcome = _outcome(record, index)
-    if outcome not in MAKE_MISS_OUTCOMES:
-        raise ValueError(f"Label {index} must be MADE or MISSED")
+    if outcome not in GROUND_TRUTH_OUTCOMES:
+        raise ValueError(f"Label {index} must be MADE, MISSED, or UNOBSERVABLE")
     return OutcomeLabel(attempt_id, outcome)
 
 
@@ -146,7 +158,7 @@ def _prediction(record: dict[str, Any], index: int) -> OutcomePrediction:
     if isinstance(confidence_value, bool) or not isinstance(confidence_value, int | float):
         raise ValueError(f"Prediction {index} is missing a numeric confidence")
     confidence = float(confidence_value)
-    if not 0 <= confidence <= 1:
+    if not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise ValueError(f"Prediction {index} confidence must be between zero and one")
     return OutcomePrediction(attempt_id, outcome, confidence)
 
@@ -168,6 +180,14 @@ def _outcome(record: dict[str, Any], index: int) -> str:
 def _mean(values: Iterable[float]) -> float:
     items = tuple(values)
     return sum(items) / len(items) if items else 0.0
+
+
+def _ensure_unique_ids(values: Iterable[str], *, kind: str) -> None:
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            raise ValueError(f"Duplicate {kind} attempt_id: {value}")
+        seen.add(value)
 
 
 def _calibration_bins(pairs: Iterable[tuple[OutcomeLabel, OutcomePrediction]]) -> list[dict[str, object]]:

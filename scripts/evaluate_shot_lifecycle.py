@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Evaluate shot-event precision and recall when annotations are available."""
+"""Evaluate release precision/recall, counting every annotated release outcome."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +50,9 @@ class ShotEventEvaluation:
         return {
             "status": "evaluated",
             "tolerance_seconds": self.tolerance_seconds,
+            "ground_truth_releases": len(self.matches) + len(self.missed),
+            "predicted_releases": len(self.matches) + len(self.extra),
+            "matched_releases": len(self.matches),
             "precision": self.precision,
             "recall": self.recall,
             "matches": [
@@ -71,29 +76,38 @@ def evaluate_events(
     *,
     tolerance_seconds: float,
 ) -> ShotEventEvaluation:
-    """Greedily match predicted release events to ground truth within tolerance."""
+    """Maximize one-to-one timestamp matches, then minimize total error."""
+
+    if not math.isfinite(tolerance_seconds) or tolerance_seconds < 0:
+        raise ValueError("tolerance_seconds must be finite and non-negative")
 
     expected_events = tuple(sorted(expected, key=lambda item: (item.timestamp_seconds, item.event_id)))
-    unmatched_predictions = list(sorted(predicted, key=lambda item: (item.timestamp_seconds, item.event_id)))
-    matches: list[tuple[ShotEvent, ShotEvent]] = []
-    missed: list[ShotEvent] = []
-    for expected_event in expected_events:
-        candidates = [
-            (abs(expected_event.timestamp_seconds - predicted_event.timestamp_seconds), index, predicted_event)
-            for index, predicted_event in enumerate(unmatched_predictions)
-            if abs(expected_event.timestamp_seconds - predicted_event.timestamp_seconds) <= tolerance_seconds
-        ]
-        if not candidates:
-            missed.append(expected_event)
-            continue
-        _, index, predicted_event = min(candidates, key=lambda item: (item[0], item[2].timestamp_seconds))
-        matches.append((expected_event, predicted_event))
-        unmatched_predictions.pop(index)
+    predicted_events = tuple(sorted(predicted, key=lambda item: (item.timestamp_seconds, item.event_id)))
+
+    @cache
+    def solve(expected_index: int, predicted_index: int) -> tuple[int, float, tuple[tuple[int, int], ...]]:
+        if expected_index == len(expected_events) or predicted_index == len(predicted_events):
+            return (0, 0.0, ())
+        options = [solve(expected_index + 1, predicted_index), solve(expected_index, predicted_index + 1)]
+        error = abs(
+            expected_events[expected_index].timestamp_seconds - predicted_events[predicted_index].timestamp_seconds
+        )
+        if error <= tolerance_seconds:
+            count, total_error, pairs = solve(expected_index + 1, predicted_index + 1)
+            options.append((count + 1, total_error + error, ((expected_index, predicted_index), *pairs)))
+        return min(options, key=lambda item: (-item[0], item[1], item[2]))
+
+    _, _, index_pairs = solve(0, 0)
+    matched_expected = {expected_index for expected_index, _ in index_pairs}
+    matched_predicted = {predicted_index for _, predicted_index in index_pairs}
     return ShotEventEvaluation(
         tolerance_seconds=tolerance_seconds,
-        matches=tuple(matches),
-        missed=tuple(missed),
-        extra=tuple(unmatched_predictions),
+        matches=tuple(
+            (expected_events[expected_index], predicted_events[predicted_index])
+            for expected_index, predicted_index in index_pairs
+        ),
+        missed=tuple(event for index, event in enumerate(expected_events) if index not in matched_expected),
+        extra=tuple(event for index, event in enumerate(predicted_events) if index not in matched_predicted),
     )
 
 
@@ -149,10 +163,13 @@ def _records(payload: Any) -> list[dict[str, Any]]:
 
 def _event(record: dict[str, Any], index: int) -> ShotEvent:
     value = record.get("release_seconds", record.get("timestamp_seconds", record.get("time_seconds")))
-    if not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"Shot event {index} is missing a numeric release timestamp")
+    timestamp = float(value)
+    if not math.isfinite(timestamp) or timestamp < 0:
+        raise ValueError(f"Shot event {index} release timestamp must be finite and non-negative")
     event_id = record.get("id", record.get("attempt_id", ""))
-    return ShotEvent(float(value), event_id if isinstance(event_id, str) else "")
+    return ShotEvent(timestamp, event_id if isinstance(event_id, str) else "")
 
 
 def _emit(report: dict[str, object], output: Path | None) -> int:

@@ -24,8 +24,23 @@ Ball tracks, player association, rim geometry, camera-segment boundaries.
 - [x] `SHT-012` Store release time, result window, raw evidence references, and confidence.
 - [x] `SHT-013` Add deterministic tests for jump shots, layups, dunks, hooks, free throws, blocked shots, air balls, passes, pump fakes, and incomplete tracks.
 - [ ] `SHT-014` Add benchmark evaluation for shot-event precision and recall.
-  - Blocked: `scripts/evaluate_shot_lifecycle.py` provides the comparison
-    interface, but no ground-truth shot-event annotation file exists yet.
+  - `scripts/annotate_shots.py` and `scripts/match_shot_predictions.py` provide
+    the local annotation and deterministic timestamp-matching workflow.
+  - `scripts/evaluate_shot_lifecycle.py` counts every annotated release,
+    including releases whose outcome is `UNOBSERVABLE`.
+  - Blocked: no authorized ground-truth annotation file has been created.
+
+## Local Benchmark Workflow
+
+Ground truth is intentionally private and outside Git at
+`/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`.
+
+```console
+mkdir -p /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/annotate_shots.py --video /Users/hailiu/Desktop/bball_pt2.mov --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/match_shot_predictions.py --annotations /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json --automatic-attempts /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/automatic-attempts.json --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json --tolerance-seconds 0.25
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/evaluate_shot_lifecycle.py --annotations /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json --predictions /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json --tolerance-seconds 0.25 --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/lifecycle-report.json
+```
 
 ## Completion Criteria
 
