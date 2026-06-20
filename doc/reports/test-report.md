@@ -687,3 +687,17 @@ Full quality gates:
   queue behavior.
 - Full validation passed: 468 tests with 92.64% total coverage; strict mypy
   passed for 153 source files; Ruff lint and format checks passed for 156 files.
+
+### Real-Video Render Frame Boundary
+
+- Completed on 2026-06-21 after the production proxy reported 912 measured
+  frames for a fractional 91.228333-second duration that previously implied
+  913 frames when rounded from duration alone.
+- Rendering now prefers probed source frame count metadata and only falls back
+  to duration-derived output length when the media probe has no frame count.
+- The renderer still decodes sequentially and fails when the source ends before
+  the measured output sequence is complete; no decode-error tolerance was
+  introduced.
+- Deterministic regression coverage proves that 912 measured frames render
+  successfully while a source that actually yields only 911 frames raises the
+  existing incomplete-decode error.
