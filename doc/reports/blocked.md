@@ -79,17 +79,26 @@
 
 ## Docker/Colima Smoke Test
 
-- **Date:** 2026-06-19
+- **Date:** 2026-06-20
 - **Module:** Release Gate
 - **Blocked item:** Docker/Colima runtime smoke.
-- **Status:** Docker CLI and Colima are installed, but the Colima daemon is not
-  running.
-- **Reason:** `docker build -t shotsight2-smoke:local .` failed because Docker
-  could not connect to `/Users/hailiu/.colima/default/docker.sock`.
-- **Verified with:** `docker --version` returned Docker version 29.5.3;
-  `which colima` returned `/opt/homebrew/bin/colima`; `colima status` returned
-  `colima is not running`.
-- **Impact:** Dockerfile contents can be inspected, but Docker image build/run
-  smoke cannot be claimed in the current local runtime state.
-- **Unblock condition:** Start Colima or another Docker daemon, then run
-  `docker build -t shotsight2-smoke:local .` and a container `/health` smoke.
+- **Status:** Static configuration passes, and Colima started successfully, but
+  the image build and service runtime smoke did not complete.
+- **Verified environment:** Docker CLI 29.5.3; Colima using the macOS
+  Virtualization Framework with an `aarch64` Docker 29.5.2 daemon; standalone
+  Docker Compose 5.1.4; `docker-compose config --quiet` passed.
+- **Build attempt:** `./scripts/docker-smoke.sh` reached the Compose build and
+  failed before creating containers with
+  `docker-credential-desktop: executable file not found in $PATH`. The global
+  Docker client configuration still contains `"credsStore": "desktop"` from a
+  removed Docker Desktop installation. Compose also reported that Buildx was
+  missing; Homebrew `docker-buildx` 0.35.0 was subsequently installed, but the
+  build was not retried before runtime cleanup.
+- **Cleanup:** No Compose resources existed, and `colima stop` completed
+  successfully. No Docker or Colima command remains running for this test.
+- **Impact:** The Dockerfile and two-service Compose model are statically
+  validated, but image installation, container startup, web health, worker
+  heartbeat, and shared-volume behavior remain unverified.
+- **Unblock condition:** Remove or replace the stale Docker Desktop credential
+  helper configuration (or use an isolated Docker client configuration), start
+  Colima, and rerun `./scripts/docker-smoke.sh` through successful cleanup.

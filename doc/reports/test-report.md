@@ -541,14 +541,30 @@ and baseline formatting before its module can pass the quality gate.
 
 ### Docker/Colima Smoke
 
-- Attempted on 2026-06-19.
-- `docker --version` passed with Docker version 29.5.3.
-- `which colima` found `/opt/homebrew/bin/colima`.
-- `colima status` failed with `colima is not running`.
-- `docker build -t shotsight2-smoke:local .` failed because Docker could not
-  connect to `/Users/hailiu/.colima/default/docker.sock`.
-- Result: Docker/Colima smoke remains blocked by local daemon state; see
-  `doc/reports/blocked.md`.
+- Reattempted on 2026-06-20 after the Docker runtime configuration was updated.
+- Added a CPU vision image that installs `.[vision]`, includes FFmpeg, runs as a
+  non-root user, and excludes local environments, worktrees, models, media, and
+  application data from the build context.
+- Added `web` and standard `shotsight-worker` Compose services sharing the
+  persistent `shotsight-data` volume and absolute SQLite path. The web
+  healthcheck validates HTTP health; the worker healthcheck validates a recent
+  SQLite heartbeat.
+- Four Docker configuration tests passed, `sh -n scripts/docker-smoke.sh`
+  passed, and `docker-compose config --quiet` passed.
+- Homebrew Docker Compose 5.1.4 and Buildx 0.35.0 were installed.
+- Colima started successfully with 4 CPUs, 8 GB memory, a 40 GB disk profile,
+  the macOS Virtualization Framework, and an `aarch64` Docker 29.5.2 daemon.
+- The image build stopped before container creation because the global Docker
+  configuration references the unavailable `docker-credential-desktop`
+  helper. Buildx was installed after that attempt, but the build was not
+  retried before cleanup.
+- `docker-compose down --volumes --remove-orphans` found no resources, and
+  `colima stop` completed successfully.
+- Final repository gates passed: full pytest at 92.16% coverage, strict mypy
+  across 151 source files, Ruff lint, Ruff format check, and `git diff --check`.
+- Result: static Docker readiness passes; build and runtime smoke remain
+  blocked by the stale host credential-helper configuration. See
+  `doc/reports/blocked.md` for the exact unblock condition.
 
 ### Requirements Traceability Audit
 

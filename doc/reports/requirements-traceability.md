@@ -40,7 +40,7 @@ document, not a replacement for the detailed design.
 | Bilingual English/Chinese UI | Implemented | `src/shotsight2/presentation/i18n`, `tests/presentation` |
 | End-to-end local workflow | Incomplete | Existing `tests/e2e/test_local_workflow.py` simulates analysis publication; no production worker handler or concrete stage composition exists yet |
 | macOS native smoke | Implemented | `doc/reports/test-report.md` macOS native app smoke entry |
-| Docker/Colima smoke | Blocked | Colima daemon not running; see `doc/reports/blocked.md` |
+| Docker/Colima smoke | Blocked | Static Compose validation passes, but image build is blocked by a stale Docker Desktop credential helper; see `doc/reports/blocked.md` |
 | Windows/Linux smoke | Deferred | Deferred by current macOS phase in `doc/prompt.md`; must not be marked complete |
 
 ## Open Release Risks
