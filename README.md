@@ -86,6 +86,23 @@ PYTHONPATH=src .venv/bin/python -m shotsight2.worker
 PYTHONPATH=src .venv/bin/uvicorn shotsight2.main:app --host 127.0.0.1 --port 4173
 ```
 
+### Optional Docker CPU Runtime
+
+The Docker deployment runs the CPU/OpenCV backend. Apple Silicon MLX remains a
+native macOS runtime and is not installed in the Linux image. Start the web and
+worker services with shared persistent storage using either Compose command:
+
+```sh
+docker compose up --build
+# Or, when Compose is installed as a standalone Homebrew command:
+docker-compose up --build
+```
+
+The web UI is available at `http://127.0.0.1:4173`. Compose stores uploads, the
+SQLite queue, and generated artifacts in the `shotsight-data` named volume. Run
+`./scripts/docker-smoke.sh` for the reproducible build, web health, worker
+heartbeat, product-readiness, and cleanup smoke test.
+
 Run the quality gates:
 
 ```sh

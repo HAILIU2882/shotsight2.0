@@ -586,28 +586,60 @@ mkdir -p /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2
   the uploaded `bball_pt2.mov` detail page.
 - Remaining release blockers observed during this 2026-06-19 pass:
   - MLX was unavailable at that time; resolved by the 2026-06-20 integration.
-  - Docker CLI available, but `colima status` still reports
-    `colima is not running`.
+  - Docker was unavailable during that pass; resolved by the successful
+    2026-06-20 isolated Docker/Colima smoke below.
 
 ### Docker/Colima Smoke
 
-- Attempted on 2026-06-19.
-- `docker --version` passed with Docker version 29.5.3.
-- `which colima` found `/opt/homebrew/bin/colima`.
-- `colima status` failed with `colima is not running`.
-- `docker build -t shotsight2-smoke:local .` failed because Docker could not
-  connect to `/Users/hailiu/.colima/default/docker.sock`.
-- Result: Docker/Colima smoke remains blocked by local daemon state; see
-  `doc/reports/blocked.md`.
+- Completed on 2026-06-20 after merging the production analysis worker.
+- Added a CPU vision image that installs `.[vision]`, includes FFmpeg, runs as a
+  non-root user, and excludes local environments, worktrees, models, media, and
+  application data from the build context.
+- Added `web` and standard `shotsight-worker` Compose services sharing the
+  persistent `shotsight-data` volume and absolute SQLite path. The web
+  healthcheck validates HTTP health; the worker healthcheck validates a recent
+  SQLite heartbeat.
+- Four Docker configuration tests passed, `sh -n scripts/docker-smoke.sh`
+  passed, and `docker-compose config --quiet` passed.
+- Homebrew Docker Compose 5.1.4 and Buildx 0.35.0 were installed.
+- Colima started successfully with 4 CPUs, 8 GB memory, a 40 GB disk profile,
+  the macOS Virtualization Framework, and an `aarch64` Docker 29.5.2 daemon.
+- The smoke used an isolated temporary `DOCKER_CONFIG` with plugin discovery
+  and no `credsStore`; no global Docker configuration was modified.
+- The first isolated image build succeeded, then both services restarted with
+  `MigrationError: No migrations found in /usr/local/lib/python3.12/migrations`.
+  The final fix moved all six SQL files into the installable
+  `shotsight2/migrations` package, changed `SQLiteDatabase` to resolve that
+  package-relative location, removed the top-level duplicate, and added source
+  and Hatch package-root regression tests. No Python-version-specific Docker
+  path remains.
+- The retry built and installed the package wheel in `shotsight2:local`, proving
+  the wheel contained its migration resources, then created the shared named
+  volume and started the web and standard production worker containers. Both
+  migrated the database and reported healthy. `/health` returned HTTP 200 in
+  the `production` environment with FFmpeg 7.1.4 available and OpenCV 4.13.0
+  selected as the ready CPU backend. The worker healthcheck confirmed a recent
+  SQLite heartbeat in the shared database.
+- The smoke script removed both containers, the network, and named volume after
+  validation. Result: Docker/Colima runtime smoke passed.
+- Revalidated on 2026-06-21 after merging worker-aware readiness and benchmark
+  annotation. The rebuilt package wheel again migrated successfully; both
+  containers were healthy; `/health` returned HTTP 200; and `/ready` returned
+  HTTP 200 with database and queue `available`, worker `ready`, and a fresh
+  persisted heartbeat. Cleanup again removed both containers, the network, and
+  the named volume, and Colima stopped cleanly.
+- Final post-merge gates passed: 483 tests, 92.64% total coverage, strict mypy
+  over 159 source files, Ruff lint and format checks over 164 files, all native
+  shell syntax checks, Compose rendering, and `git diff --check`.
 
 ### Requirements Traceability Audit
 
 - Added on 2026-06-19 in `doc/reports/requirements-traceability.md`.
 - The matrix maps product requirement areas to implementation evidence and
   explicitly identifies blocked or deferred requirements.
-- Result: no requirement is silently omitted. After the 2026-06-20 MLX
-  integration, the release gate remains unchecked for ground-truth benchmark
-  labels, visual-render baselines, Docker/Colima smoke, and Windows/Linux smoke.
+- Result: no requirement is silently omitted. Docker/Colima is now validated;
+  release blockers remain for ground-truth benchmark labels, visual-render
+  baselines, and deferred Windows/Linux smoke.
 
 ### Apple Silicon MLX SAM 3 Integration
 
