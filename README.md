@@ -101,7 +101,7 @@ docker-compose up --build
 The web UI is available at `http://127.0.0.1:4173`. Compose stores uploads, the
 SQLite queue, and generated artifacts in the `shotsight-data` named volume. Run
 `./scripts/docker-smoke.sh` for the reproducible build, web health, worker
-heartbeat, and cleanup smoke test.
+heartbeat, product-readiness, and cleanup smoke test.
 
 Run the quality gates:
 

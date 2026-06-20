@@ -28,4 +28,5 @@ compose --project-name "$project_name" build
 compose --project-name "$project_name" up --detach --wait --wait-timeout 120
 
 python3 -c "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:4173/health', timeout=5); payload = json.load(response); assert response.status == 200 and payload['status'] == 'ok'; print(json.dumps(payload, sort_keys=True))"
+python3 -c "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:4173/ready', timeout=5); payload = json.load(response); assert response.status == 200 and payload['status'] == 'ready' and payload['worker']['status'] == 'ready'; print(json.dumps(payload, sort_keys=True))"
 compose --project-name "$project_name" ps

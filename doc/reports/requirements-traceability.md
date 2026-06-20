@@ -40,7 +40,7 @@ document, not a replacement for the detailed design.
 | Bilingual English/Chinese UI | Implemented | `src/shotsight2/presentation/i18n`, `tests/presentation` |
 | End-to-end local workflow | Implemented | Production worker composition and real-adapter generated-video coverage in `src/shotsight2/worker/runtime.py`, `src/shotsight2/services/production_pipeline.py`, and `tests/e2e/test_production_pipeline.py` |
 | macOS native smoke | Implemented | `doc/reports/test-report.md` macOS native app smoke entry |
-| Docker/Colima smoke | Implemented | Isolated-config image build, healthy web/worker services, HTTP health, SQLite worker heartbeat, shared volume, and cleanup evidence in `doc/reports/test-report.md` |
+| Docker/Colima smoke | Implemented | Isolated-config image build, healthy web/worker services, HTTP liveness and product readiness, SQLite worker heartbeat, shared volume, and cleanup evidence in `doc/reports/test-report.md` |
 | Windows/Linux smoke | Deferred | Deferred by current macOS phase in `doc/prompt.md`; must not be marked complete |
 
 ## Open Release Risks

@@ -41,3 +41,4 @@ def test_smoke_script_accepts_compose_plugin_or_standalone_command() -> None:
     assert "docker compose version" in smoke_script
     assert "command -v docker-compose" in smoke_script
     assert "up --detach --wait --wait-timeout 120" in smoke_script
+    assert "http://127.0.0.1:4173/ready" in smoke_script

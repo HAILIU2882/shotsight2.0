@@ -2,7 +2,7 @@
 
 ## Shot Lifecycle Precision/Recall Benchmark
 
-- **Date:** 2026-06-20
+- **Date:** 2026-06-21
 - **Module:** Shot Lifecycle
 - **Blocked item:** `SHT-014`
 - **Status:** Local annotation, timestamp matching, export, and comparison
@@ -81,8 +81,9 @@
   Pillow; Hatch built and installed a wheel containing the package migration
   resources; the `web` and standard production `shotsight-worker` containers
   both migrated the shared database and became healthy; HTTP `/health` returned
-  200 with FFmpeg available and `opencv-cpu` selected and ready; the worker's
-  SQLite heartbeat healthcheck passed against the shared `shotsight-data`
-  volume.
+  200 with FFmpeg available and `opencv-cpu` selected and ready; HTTP `/ready`
+  returned 200 with the database and queue available and the production worker
+  ready; the worker's SQLite heartbeat healthcheck passed against the shared
+  `shotsight-data` volume.
 - **Cleanup:** The smoke script removed both containers, the network, and the
   named volume. The Docker runtime release gate is no longer blocked.

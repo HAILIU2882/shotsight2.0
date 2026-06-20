@@ -622,6 +622,15 @@ mkdir -p /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2
   SQLite heartbeat in the shared database.
 - The smoke script removed both containers, the network, and named volume after
   validation. Result: Docker/Colima runtime smoke passed.
+- Revalidated on 2026-06-21 after merging worker-aware readiness and benchmark
+  annotation. The rebuilt package wheel again migrated successfully; both
+  containers were healthy; `/health` returned HTTP 200; and `/ready` returned
+  HTTP 200 with database and queue `available`, worker `ready`, and a fresh
+  persisted heartbeat. Cleanup again removed both containers, the network, and
+  the named volume, and Colima stopped cleanly.
+- Final post-merge gates passed: 483 tests, 92.64% total coverage, strict mypy
+  over 159 source files, Ruff lint and format checks over 164 files, all native
+  shell syntax checks, Compose rendering, and `git diff --check`.
 
 ### Requirements Traceability Audit
 
