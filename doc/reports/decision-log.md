@@ -29,3 +29,20 @@
   version controlled.
 - **Reversal:** Remove the explicit setting after all supported packaging
   environments prove reliable editable installation behavior.
+
+## 2026-06-20 - Separate Web Liveness from Analysis Readiness
+
+- **Affected modules:** Application API, Worker Queue
+- **Ambiguity:** A single endpoint cannot simultaneously be a safe web-process
+  liveness probe and fail when the independently supervised analysis worker is
+  unavailable.
+- **Decision:** Keep `/health` HTTP-200 compatible for web liveness and expose
+  `/ready` for database, queue, and worker-heartbeat readiness. `/ready` returns
+  HTTP 503 unless a non-stopped worker has a heartbeat within the configured
+  freshness window. Active records take precedence over newer stopped records.
+- **Alternatives:** Make `/health` return HTTP 503 when the worker is absent, or
+  always return HTTP 200 with a nested readiness flag.
+- **Rationale:** Separate endpoints preserve reliable container/process
+  supervision while giving the UI and operations an actionable analysis gate.
+- **Reversal:** The routes can be versioned later if deployment orchestration
+  adopts a different probe contract.

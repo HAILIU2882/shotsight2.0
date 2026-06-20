@@ -68,7 +68,14 @@ Copy-Item .env.example .env
 ./scripts/run.ps1
 ```
 
-Open `http://127.0.0.1:4173/health`.
+Use `http://127.0.0.1:4173/health` for web-process liveness. It intentionally
+returns HTTP 200 even when the separate analysis worker is absent, so process
+supervisors do not restart a healthy web server in a loop. Use
+`http://127.0.0.1:4173/ready` for product readiness: it returns HTTP 200 only
+when SQLite and the queue are available and at least one non-stopped worker has
+a heartbeat newer than `SHOTSIGHT_WORKER_READINESS_STALE_SECONDS` (30 seconds
+by default). Missing, stale, stopped, or unknown worker state returns HTTP 503
+with structured database, queue, and worker details.
 
 Both native launchers supervise two processes: the FastAPI web server and the
 independent analysis worker. Stop them together with `Ctrl-C`. For debugging,

@@ -42,7 +42,13 @@
 ## Overall Release Gates
 
 - [ ] All 22 module checklists are complete.
-- [x] End-to-end upload, analysis, review, reanalysis, and deletion tests pass, including the real-adapter production worker/pipeline integration.
+- [ ] End-to-end upload, analysis, review, reanalysis, and deletion tests pass. Live production worker/pipeline analysis coverage now exists; one combined upload-through-deletion workflow remains required.
 - [ ] Vision benchmark metrics are documented for every supported backend.
 - [ ] macOS, Windows, and Linux installation smoke tests pass.
 - [ ] The requirements traceability matrix has no unimplemented requirement.
+
+## Product Readiness Hardening
+
+- [x] Web liveness remains independent from analysis worker failures.
+- [x] Analysis readiness reports database, queue, and persisted worker heartbeat state.
+- [x] Missing, fresh, stale, stopped, active-versus-stopped, and storage failure states have deterministic tests.

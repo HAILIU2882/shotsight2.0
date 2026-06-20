@@ -259,8 +259,8 @@ and baseline formatting before its module can pass the quality gate.
   blocked shots, air balls, passes, pump fakes, incomplete tracks, duplicate
   rim observations, and unstable camera ranges.
 - `scripts/evaluate_shot_lifecycle.py` provides the precision/recall comparison
-  interface, but benchmark metrics are blocked because no ground-truth
-  shot-event annotation file exists.
+  interface, but benchmark metrics remain blocked because no authorized private
+  ground-truth annotation file has been created.
 
 ### Outcome Classification
 
@@ -276,9 +276,59 @@ and baseline formatting before its module can pass the quality gate.
   backboard miss, air ball, blocked shot, occluded rim evidence, tracking loss,
   and review override independence between automatic and effective outcomes.
 - `scripts/evaluate_outcome_classification.py` provides the make/miss accuracy
-  and uncertainty calibration comparison interface, but benchmark metrics are
-  blocked because no ground-truth outcome label file and matching prediction
-  file exist.
+  and uncertainty calibration comparison interface, but benchmark metrics
+  remain blocked because no authorized private labels and matching automatic
+  predictions have been created.
+
+### Benchmark Labeling Utilities
+
+- Completed in `codex/benchmark-labeling` on 2026-06-20 without changing
+  production source modules or creating real labels.
+- `scripts/annotate_shots.py` serves a provided local video with precise
+  time/frame controls, `MADE`/`MISSED`/`UNOBSERVABLE` release buttons, editable
+  rows, deletion, HTTP byte-range video streaming, and atomic JSON persistence.
+- Ground truth is intentionally private and outside Git at
+  `/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`; the
+  tool rejects annotation output inside the repository.
+- `scripts/match_shot_predictions.py` deterministically maximizes one-to-one
+  timestamp matches, minimizes total timestamp error, and exports the shared
+  evaluator schema with matched, missed, and extra attempt accounting.
+- Lifecycle evaluation counts every annotated release regardless of outcome.
+  Outcome evaluation explicitly reports and excludes `UNOBSERVABLE` labels
+  from make/miss accuracy, coverage, uncertainty, and calibration metrics.
+- Nine focused tests passed. They cover schema validation, source-video hash
+  protection, external output enforcement, byte-range serving, persistence,
+  deterministic maximum matching, shared evaluator export, all-release
+  lifecycle counts, and explicit `UNOBSERVABLE` outcome exclusion.
+- Full validation passed: 462 tests, 92.16% total coverage, strict mypy over
+  152 source files, Ruff lint, Ruff format over 157 files, and
+  `git diff --check`.
+- A browser smoke loaded `/Users/hailiu/Desktop/bball_pt2.mov` as a 91.228-second,
+  60 FPS, 5,469-frame source and verified one-frame stepping from frame 0 to 1.
+  No browser errors or annotation output were produced.
+
+Run these commands from the benchmark-labeling worktree:
+
+```console
+mkdir -p /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/annotate_shots.py \
+  --video /Users/hailiu/Desktop/bball_pt2.mov \
+  --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/match_shot_predictions.py \
+  --annotations /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json \
+  --automatic-attempts /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/automatic-attempts.json \
+  --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json \
+  --tolerance-seconds 0.25
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/evaluate_shot_lifecycle.py \
+  --annotations /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json \
+  --predictions /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json \
+  --tolerance-seconds 0.25 \
+  --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/lifecycle-report.json
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/evaluate_outcome_classification.py \
+  --labels /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json \
+  --predictions /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json \
+  --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/outcome-report.json
+```
 
 ### Artifact Rendering
 
@@ -644,3 +694,19 @@ Full quality gates:
 - Strict mypy passed with no issues in 152 source files.
 - Ruff lint passed; Ruff format check reported 155 files formatted.
 - Native shell syntax checks and `git diff --check` passed.
+
+### Worker-Aware Product Readiness
+
+- Completed on 2026-06-20 without adding schema or fabricated worker metadata.
+- `/health` remains a liveness-safe HTTP 200 endpoint and advertises `/ready`.
+- `/ready` returns structured database, queue, and worker state, using the most
+  recent active worker heartbeat ahead of newer stopped-worker records.
+- HTTP 200 means analysis-ready. Missing, stale, stopped, database-unavailable,
+  or queue-unavailable states return HTTP 503 without raising an API error.
+- Deterministic tests cover no worker, fresh heartbeat, stale boundary,
+  graceful stop, active-versus-newer-stopped precedence, database failure, and
+  queue failure.
+- Focused validation passed: 21 tests across health, app runtime, and SQLite
+  queue behavior.
+- Full validation passed: 468 tests with 92.64% total coverage; strict mypy
+  passed for 153 source files; Ruff lint and format checks passed for 156 files.

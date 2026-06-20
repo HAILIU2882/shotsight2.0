@@ -9,8 +9,9 @@ from typing import cast
 
 from shotsight2.adapters.persistence.database import SQLiteDatabase
 from shotsight2.domain import AnalysisStage, JobStatus
-from shotsight2.domain.jobs import ClaimedJob, QueueMessage
+from shotsight2.domain.jobs import ClaimedJob, QueueMessage, QueueRuntimeSnapshot, WorkerHeartbeatRecord
 from shotsight2.domain.persistence import JsonObject
+from shotsight2.ports.jobs import ReadinessQueryError
 
 
 class ClaimLostError(RuntimeError):
@@ -29,6 +30,13 @@ def _message(row: sqlite3.Row) -> QueueMessage:
         video_id=cast(str, row["video_id"]),
         run_id=cast(str, row["run_id"]),
     )
+
+
+def _datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise ValueError("Persisted worker timestamps must be timezone-aware")
+    return parsed.astimezone(UTC)
 
 
 class SQLiteWorkerQueue:
@@ -239,6 +247,51 @@ class SQLiteWorkerQueue:
                 (worker_id, stale_before),
             ).fetchone()
         return row is not None
+
+    def inspect_runtime(self) -> QueueRuntimeSnapshot:
+        """Return durable queue counts and the latest worker lifecycle record."""
+        try:
+            with self._database.read() as connection:
+                connection.execute("SELECT 1").fetchone()
+                try:
+                    counts = connection.execute(
+                        """
+                        SELECT
+                            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS queued_jobs,
+                            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS running_jobs
+                        FROM analysis_jobs
+                        """,
+                        (JobStatus.QUEUED.value, JobStatus.RUNNING.value),
+                    ).fetchone()
+                    worker = connection.execute(
+                        """
+                        SELECT worker_id, started_at, heartbeat_at, stopped_at
+                        FROM worker_heartbeats
+                        ORDER BY (stopped_at IS NULL) DESC, heartbeat_at DESC, worker_id ASC
+                        LIMIT 1
+                        """
+                    ).fetchone()
+                except sqlite3.Error as error:
+                    raise ReadinessQueryError(database_available=True) from error
+        except ReadinessQueryError:
+            raise
+        except (OSError, sqlite3.Error) as error:
+            raise ReadinessQueryError(database_available=False) from error
+
+        latest_worker = None
+        if worker is not None:
+            stopped_at = cast(str | None, worker["stopped_at"])
+            latest_worker = WorkerHeartbeatRecord(
+                worker_id=cast(str, worker["worker_id"]),
+                started_at=_datetime(cast(str, worker["started_at"])),
+                heartbeat_at=_datetime(cast(str, worker["heartbeat_at"])),
+                stopped_at=None if stopped_at is None else _datetime(stopped_at),
+            )
+        return QueueRuntimeSnapshot(
+            queued_jobs=0 if counts is None else int(counts["queued_jobs"] or 0),
+            running_jobs=0 if counts is None else int(counts["running_jobs"] or 0),
+            latest_worker=latest_worker,
+        )
 
     def _finish(
         self,
