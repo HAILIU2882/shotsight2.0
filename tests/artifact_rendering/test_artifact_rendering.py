@@ -335,6 +335,44 @@ def test_opencv_renderer_decodes_sequentially_and_requires_complete_sequence(
     assert incomplete_capture.released
 
 
+def test_opencv_renderer_uses_measured_frames_for_fractional_duration_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    written: list[str] = []
+
+    def record_write(path: str, _frame: Any) -> bool:
+        written.append(path)
+        return True
+
+    complete_capture = _FakeCapture(912)
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _source: complete_capture)
+    monkeypatch.setattr(cv2, "imwrite", record_write)
+    renderer = OpenCVOverlayFrameSequenceRenderer()
+    request = _overlay_sequence_request(
+        tmp_path,
+        duration_seconds=91.228333,
+        source_frame_count=912,
+    )
+
+    renderer.render_sequence(request)
+
+    assert complete_capture.read_count == 912
+    assert len(written) == 912
+    assert complete_capture.released
+
+    truncated_capture = _FakeCapture(911)
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _source: truncated_capture)
+
+    with pytest.raises(
+        ArtifactRenderingError,
+        match=r"complete overlay sequence \(911/912 frames written\)",
+    ):
+        renderer.render_sequence(request)
+
+    assert truncated_capture.released
+
+
 def test_generated_video_render_smoke_preserves_media_and_draws_overlay(tmp_path: Path) -> None:
     if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
         pytest.skip("FFmpeg and ffprobe are required for the generated-video rendering smoke")
@@ -487,6 +525,7 @@ def _request(
         source_width=160,
         source_height=90,
         source_fps=10.0,
+        source_frame_count=round(duration_seconds * 10.0),
         attempts=attempts or (_attempt(release_seconds=0.2),),
         locations=locations if locations is not None else (_location(),),
         players=(PlayerTrack("player-1", "run-1", "video-1", "Player 1", "Alice", 0.9),),
@@ -578,7 +617,12 @@ def _metadata(path: Path) -> MediaMetadata:
     )
 
 
-def _overlay_sequence_request(output_directory: Path, *, duration_seconds: float) -> OverlaySequenceRequest:
+def _overlay_sequence_request(
+    output_directory: Path,
+    *,
+    duration_seconds: float,
+    source_frame_count: int | None = None,
+) -> OverlaySequenceRequest:
     source = output_directory / "source.mp4"
     source.touch()
     return OverlaySequenceRequest(
@@ -590,6 +634,7 @@ def _overlay_sequence_request(output_directory: Path, *, duration_seconds: float
         duration_seconds=duration_seconds,
         frames_per_second=10.0,
         source_frames_per_second=10.0,
+        source_frame_count=source_frame_count,
         observations=(),
         attempts=(),
         players_by_id={},
