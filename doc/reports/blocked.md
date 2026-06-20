@@ -2,7 +2,7 @@
 
 ## Shot Lifecycle Precision/Recall Benchmark
 
-- **Date:** 2026-06-20
+- **Date:** 2026-06-21
 - **Module:** Shot Lifecycle
 - **Blocked item:** `SHT-014`
 - **Status:** Local annotation, timestamp matching, export, and comparison
@@ -58,19 +58,32 @@
   approved annotated-frame snapshots, then compare decoded rendered frames
   against those baselines in the artifact rendering test suite.
 
-## Docker/Colima Smoke Test
+## Resolved: Docker/Colima Smoke Test
 
-- **Date:** 2026-06-19
+- **Date:** 2026-06-20
 - **Module:** Release Gate
-- **Blocked item:** Docker/Colima runtime smoke.
-- **Status:** Docker CLI and Colima are installed, but the Colima daemon is not
-  running.
-- **Reason:** `docker build -t shotsight2-smoke:local .` failed because Docker
-  could not connect to `/Users/hailiu/.colima/default/docker.sock`.
-- **Verified with:** `docker --version` returned Docker version 29.5.3;
-  `which colima` returned `/opt/homebrew/bin/colima`; `colima status` returned
-  `colima is not running`.
-- **Impact:** Dockerfile contents can be inspected, but Docker image build/run
-  smoke cannot be claimed in the current local runtime state.
-- **Unblock condition:** Start Colima or another Docker daemon, then run
-  `docker build -t shotsight2-smoke:local .` and a container `/health` smoke.
+- **Status:** Resolved. The CPU image built and both Compose services passed
+  their runtime healthchecks.
+- **Verified environment:** Docker CLI 29.5.3; Colima using the macOS
+  Virtualization Framework with an `aarch64` Docker 29.5.2 daemon; standalone
+  Docker Compose 5.1.4; `docker-compose config --quiet` passed.
+- **Initial failure and fix:** The first isolated build succeeded, but both
+  services restarted with `MigrationError` because repository SQL migrations
+  were absent from the installed image. All six SQL files now live under the
+  installable `shotsight2/migrations` package, and `SQLiteDatabase` resolves
+  that package-relative path without depending on a Python installation
+  layout. The top-level duplicate was removed.
+- **Successful command:** `DOCKER_CONFIG=<isolated-temp-dir>
+  ./scripts/docker-smoke.sh`. The temporary Docker config contained plugin
+  discovery and no credential store; the user's global Docker config was not
+  changed.
+- **Runtime evidence:** The image installed FFmpeg, NumPy, OpenCV headless, and
+  Pillow; Hatch built and installed a wheel containing the package migration
+  resources; the `web` and standard production `shotsight-worker` containers
+  both migrated the shared database and became healthy; HTTP `/health` returned
+  200 with FFmpeg available and `opencv-cpu` selected and ready; HTTP `/ready`
+  returned 200 with the database and queue available and the production worker
+  ready; the worker's SQLite heartbeat healthcheck passed against the shared
+  `shotsight-data` volume.
+- **Cleanup:** The smoke script removed both containers, the network, and the
+  named volume. The Docker runtime release gate is no longer blocked.

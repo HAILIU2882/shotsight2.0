@@ -1,10 +1,69 @@
+x-shotsight-image: &shotsight-image
+  image: shotsight2:local
+  build:
+    context: .
+
+x-shotsight-environment: &shotsight-environment
+  SHOTSIGHT_ENV: production
+  SHOTSIGHT_HOST: 0.0.0.0
+  SHOTSIGHT_PORT: "4173"
+  SHOTSIGHT_DATA_DIR: /app/data
+  SHOTSIGHT_DATABASE_URL: sqlite:////app/data/database/shotsight2.db
+  SHOTSIGHT_MAX_UPLOAD_BYTES: ${SHOTSIGHT_MAX_UPLOAD_BYTES:-1073741824}
+  SHOTSIGHT_MAX_VIDEO_MINUTES: ${SHOTSIGHT_MAX_VIDEO_MINUTES:-30}
+  SHOTSIGHT_DEFAULT_LANGUAGE: ${SHOTSIGHT_DEFAULT_LANGUAGE:-en}
+  SHOTSIGHT_ENABLE_SAM3: "false"
+  SHOTSIGHT_TRACKING_BACKEND: opencv-cpu
+
 services:
-  shotsight:
-    build: .
-    env_file:
-      - .env
+  web:
+    <<: *shotsight-image
+    command: ["uvicorn", "shotsight2.main:app", "--host", "0.0.0.0", "--port", "4173"]
+    environment: *shotsight-environment
+    init: true
     ports:
       - "4173:4173"
     volumes:
-      - ./data:/app/data
+      - shotsight-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, urllib.request;
+          response = urllib.request.urlopen('http://127.0.0.1:4173/health', timeout=3);
+          payload = json.load(response);
+          assert response.status == 200 and payload['status'] == 'ok'
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
 
+  worker:
+    <<: *shotsight-image
+    command: ["shotsight-worker"]
+    environment: *shotsight-environment
+    init: true
+    volumes:
+      - shotsight-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import sqlite3;
+          from datetime import UTC, datetime, timedelta;
+          connection = sqlite3.connect('/app/data/database/shotsight2.db');
+          row = connection.execute("SELECT MAX(heartbeat_at) FROM worker_heartbeats WHERE stopped_at IS NULL").fetchone();
+          assert row and row[0] and datetime.fromisoformat(row[0]) > datetime.now(UTC) - timedelta(seconds=30)
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  shotsight-data:
