@@ -244,6 +244,7 @@ flowchart TB
 - `/jobs/{job_id}`
 - `/settings/language`
 - `/health`
+- `/ready`
 
 ### 8.3 Video Library Module
 
@@ -939,7 +940,8 @@ never see a partially published result set.
 | `POST` | `/videos/{id}/tracking-prompts` | Add ball repair prompt |
 | `GET` | `/videos/{id}/artifacts/{artifact_id}` | Stream local artifact |
 | `PUT` | `/settings/language` | Change English/Chinese preference |
-| `GET` | `/health` | Web and worker health |
+| `GET` | `/health` | Web-process liveness and local capability diagnostics |
+| `GET` | `/ready` | Analysis readiness from database, queue, and worker heartbeat state |
 
 These routes are local application boundaries. They do not imply public network
 exposure or a cloud API.

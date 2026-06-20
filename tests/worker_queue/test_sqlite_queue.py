@@ -17,6 +17,7 @@ from shotsight2.adapters.persistence import SQLiteDatabase, SQLiteJobRepository
 from shotsight2.adapters.sqlite_queue import ClaimLostError, SQLiteWorkerQueue
 from shotsight2.domain import JobStatus
 from shotsight2.domain.jobs import QueueMessage
+from shotsight2.ports.jobs import ReadinessQueryError
 from tests.worker_queue.conftest import NOW, seed_run
 
 
@@ -189,6 +190,41 @@ def test_worker_death_leaves_claim_for_restart(
     queue.acknowledge(restarted, acknowledged_at=NOW + timedelta(seconds=12))
     completed = SQLiteJobRepository(database).get("job-1")
     assert completed is not None and completed.status is JobStatus.COMPLETED
+
+
+def test_runtime_inspection_prefers_active_worker_over_newer_stopped_worker(
+    queue: SQLiteWorkerQueue,
+) -> None:
+    """A newer stopped record cannot mask an older active worker heartbeat."""
+    queue.heartbeat("worker-active", heartbeat_at=NOW + timedelta(seconds=2))
+    queue.heartbeat("worker-stopped", heartbeat_at=NOW + timedelta(seconds=3))
+    queue.stop_worker("worker-stopped", stopped_at=NOW + timedelta(seconds=4))
+
+    snapshot = queue.inspect_runtime()
+
+    assert snapshot.queued_jobs == 0
+    assert snapshot.running_jobs == 0
+    assert snapshot.latest_worker is not None
+    assert snapshot.latest_worker.worker_id == "worker-active"
+    assert snapshot.latest_worker.started_at == NOW + timedelta(seconds=2)
+    assert snapshot.latest_worker.heartbeat_at == NOW + timedelta(seconds=2)
+    assert snapshot.latest_worker.stopped_at is None
+
+
+def test_runtime_inspection_distinguishes_database_and_queue_failures(tmp_path: Path) -> None:
+    """Inspection preserves whether SQLite connected before a queue query failed."""
+    database_directory = tmp_path / "database-directory"
+    database_directory.mkdir()
+    unavailable_database = SQLiteWorkerQueue(SQLiteDatabase(database_directory))
+
+    with pytest.raises(ReadinessQueryError) as unavailable:
+        unavailable_database.inspect_runtime()
+    assert not unavailable.value.database_available
+
+    unmigrated_database = SQLiteWorkerQueue(SQLiteDatabase(tmp_path / "unmigrated.db"))
+    with pytest.raises(ReadinessQueryError) as unavailable_queue:
+        unmigrated_database.inspect_runtime()
+    assert unavailable_queue.value.database_available
 
 
 def test_failure_json_is_deterministic(
