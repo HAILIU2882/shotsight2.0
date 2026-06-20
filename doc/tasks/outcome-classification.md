@@ -21,6 +21,9 @@ Shot lifecycle candidates, ball track, calibrated rim geometry.
 - [x] `OUT-008` Preserve automatic outcome and confidence after review override.
 - [x] `OUT-009` Add tests for swish, rim make, backboard make, rim miss, backboard miss, air ball, blocked shot, occluded rim, and tracking loss.
 - [ ] `OUT-010` Add benchmark evaluation for make/miss accuracy and uncertainty calibration.
+  - `scripts/evaluate_outcome_classification.py` accepts the shared annotation
+    schema, reports the explicit `excluded_unobservable_attempts` count, and
+    excludes those rows from make/miss accuracy and calibration metrics.
 
 ## Completion Criteria
 
@@ -32,5 +35,15 @@ Shot lifecycle candidates, ball track, calibrated rim geometry.
 
 - `OUT-010` has an evaluation interface in
   `scripts/evaluate_outcome_classification.py`, but benchmark metrics remain
-  blocked because no ground-truth make/miss outcome labels and matching
-  prediction file exist in the repository or documented local fixtures.
+  blocked because no authorized ground-truth labels or matching automatic
+  predictions have been created. Labels are intentionally stored outside Git
+  at `/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`.
+
+## Local Evaluation Command
+
+After running the annotation and matching commands documented in
+`doc/tasks/shot-lifecycle.md`, evaluate observable outcomes with:
+
+```console
+/Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/python scripts/evaluate_outcome_classification.py --labels /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json --predictions /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/matched-predictions.json --output /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/outcome-report.json
+```

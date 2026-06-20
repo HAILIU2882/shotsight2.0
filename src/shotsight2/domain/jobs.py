@@ -67,3 +67,22 @@ class ClaimedJob:
     message: QueueMessage
     worker_id: str
     claimed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerHeartbeatRecord:
+    """Latest persisted lifecycle timestamps for one analysis worker."""
+
+    worker_id: str
+    started_at: datetime
+    heartbeat_at: datetime
+    stopped_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class QueueRuntimeSnapshot:
+    """Queue counts and the most recently observed worker heartbeat."""
+
+    queued_jobs: int
+    running_jobs: int
+    latest_worker: WorkerHeartbeatRecord | None

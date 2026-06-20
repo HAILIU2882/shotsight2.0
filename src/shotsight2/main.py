@@ -1,6 +1,7 @@
 """FastAPI entrypoint for the ShotSight 2.0 local web application."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -45,6 +46,7 @@ from shotsight2.api.routers.health import (
     get_artifact_store_optional,
     get_backend_registry,
     get_media_tool,
+    get_product_readiness_service,
     get_settings,
     get_system_profile,
 )
@@ -61,6 +63,7 @@ from shotsight2.services import (
     VideoIngestionService,
     VideoLibraryService,
 )
+from shotsight2.services.readiness import ProductReadinessService
 from shotsight2.services.review import ReviewService
 from shotsight2.services.tracking import TrackingOrchestrator
 
@@ -79,6 +82,8 @@ class LocalRuntime:
     calibration: CalibrationService
     review: ReviewService
     tracking: TrackingOrchestrator
+    worker_queue: SQLiteWorkerQueue
+    readiness: ProductReadinessService
 
 
 def create_app(
@@ -109,6 +114,7 @@ def create_app(
     application.dependency_overrides[get_artifact_store] = lambda: runtime.artifact_store
     application.dependency_overrides[get_media_tool] = lambda: runtime.media_tool
     application.dependency_overrides[get_artifact_store_optional] = lambda: runtime.artifact_store
+    application.dependency_overrides[get_product_readiness_service] = lambda: runtime.readiness
 
     from shotsight2.presentation import register_presentation
 
@@ -142,6 +148,10 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
     prompts = SQLiteTrackingPromptRepository(database)
     observations = SQLiteTrackingObservationRepository(database)
     queue = SQLiteWorkerQueue(database)
+    readiness = ProductReadinessService(
+        queue,
+        stale_after=timedelta(seconds=application_settings.worker_readiness_stale_seconds),
+    )
 
     video_library = VideoLibraryService(
         videos=videos,
@@ -197,6 +207,8 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
         calibration=calibration,
         review=review,
         tracking=tracking,
+        worker_queue=queue,
+        readiness=readiness,
     )
 
 

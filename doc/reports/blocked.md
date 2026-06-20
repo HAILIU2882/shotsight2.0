@@ -2,40 +2,37 @@
 
 ## Shot Lifecycle Precision/Recall Benchmark
 
-- **Date:** 2026-06-18
+- **Date:** 2026-06-20
 - **Module:** Shot Lifecycle
 - **Blocked item:** `SHT-014`
-- **Status:** Benchmark comparison interface implemented; precision/recall
-  metrics are blocked.
-- **Reason:** No ground-truth shot-event annotation file exists in the
-  repository or documented local fixtures.
-- **Verified with:** `scripts/evaluate_shot_lifecycle.py` reports
-  `status: blocked` when annotations and predictions are not supplied.
+- **Status:** Local annotation, timestamp matching, export, and comparison
+  interfaces are implemented; precision/recall metrics are blocked.
+- **Reason:** No authorized ground-truth annotation file has been created.
+  Labels are intentionally private and outside Git at
+  `/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`.
+- **Verified with:** Deterministic tests prove the lifecycle evaluator counts
+  every release, including `UNOBSERVABLE`, through the shared schema.
 - **Impact:** Deterministic lifecycle state-machine scenarios are tested, but
   real-video release-event precision and recall are not claimed.
-- **Unblock condition:** Add an authorized annotation file containing expected
-  shot release timestamps, generate lifecycle predictions for the same source,
-  then run `scripts/evaluate_shot_lifecycle.py --annotations ... --predictions ...`.
+- **Unblock condition:** Create the authorized private annotation file, export
+  automatic attempts for the same video, and run the exact annotate, match, and
+  lifecycle evaluation commands in `doc/tasks/shot-lifecycle.md`.
 
 ## Outcome Classification Accuracy and Calibration Benchmark
 
-- **Date:** 2026-06-18
+- **Date:** 2026-06-20
 - **Module:** Outcome Classification
 - **Blocked item:** `OUT-010`
-- **Status:** Benchmark comparison interface implemented; make/miss accuracy
-  and uncertainty calibration metrics are blocked.
-- **Reason:** No ground-truth make/miss outcome label file and matching
-  automatic prediction file exist in the repository or documented local
-  fixtures.
-- **Verified with:** `scripts/evaluate_outcome_classification.py` reports
-  `status: blocked` when labels and predictions are not supplied, and repository
-  search found no outcome label fixture.
+- **Status:** Shared-schema matching and comparison interfaces are implemented;
+  make/miss accuracy and uncertainty calibration metrics are blocked.
+- **Reason:** No authorized ground-truth labels or matching automatic prediction
+  file has been created. Labels remain intentionally outside Git.
+- **Verified with:** Deterministic tests prove `UNOBSERVABLE` labels are reported
+  with an explicit excluded count and omitted from outcome metrics.
 - **Impact:** Deterministic outcome classification scenarios are tested, but
   real-video make/miss accuracy and confidence calibration are not claimed.
-- **Unblock condition:** Add an authorized label file containing expected
-  `MADE`/`MISSED` outcomes and generated automatic predictions for the same
-  attempt IDs, then run
-  `scripts/evaluate_outcome_classification.py --labels ... --predictions ...`.
+- **Unblock condition:** Complete the private annotation and matching workflow,
+  then run the exact outcome command in `doc/tasks/outcome-classification.md`.
 
 ## Artifact Rendering Real-Video Visual Regression
 

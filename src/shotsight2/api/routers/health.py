@@ -6,12 +6,15 @@ from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 from shotsight2.adapters.backend_probes import BackendRegistry
 from shotsight2.config import Settings
 from shotsight2.domain.tracking_backends import SystemProfile
 from shotsight2.ports.artifacts import ArtifactStore
 from shotsight2.ports.media import MediaTool
+from shotsight2.services.readiness import ProductReadinessService
 from shotsight2.services.tracking_backend_selection import build_backend_capability_status
 
 router = APIRouter(tags=["health"])
@@ -42,6 +45,11 @@ def get_artifact_store_optional() -> ArtifactStore | None:
     return None
 
 
+def get_product_readiness_service() -> ProductReadinessService:
+    """Return the service that evaluates analysis-process readiness."""
+    raise NotImplementedError("Inject via app.dependency_overrides or create_app()")
+
+
 @router.get("/health")
 def health(
     app_settings: Annotated[Settings, Depends(get_settings)],
@@ -50,29 +58,61 @@ def health(
     media: Annotated[MediaTool | None, Depends(get_media_tool)],
     store: Annotated[ArtifactStore | None, Depends(get_artifact_store_optional)],
 ) -> dict[str, Any]:
-    """Report web health and lazily evaluated system capability status."""
-    backend_status = build_backend_capability_status(
-        registry,
-        system=system,
-        requested_backend=app_settings.tracking_backend,
-    )
-    ffmpeg: dict[str, Any] = {"available": False, "version": None}
-    if media is not None:
-        tool_status = media.status()
-        ffmpeg = {
-            "available": tool_status.available,
-            "ffmpeg_version": tool_status.ffmpeg.version,
-            "ffprobe_version": tool_status.ffprobe.version,
+    """Report web liveness while containing failures in optional diagnostics."""
+    try:
+        backend_status = build_backend_capability_status(
+            registry,
+            system=system,
+            requested_backend=app_settings.tracking_backend,
+        )
+        tracking: dict[str, Any] = asdict(backend_status)
+    except Exception:
+        tracking = {
+            "system": None if system is None else asdict(system),
+            "backends": [],
+            "selected_backend": None,
+            "selection_error": "capability_probe_failed",
         }
-    storage: dict[str, Any] = {"total_bytes": None}
+    ffmpeg: dict[str, Any] = {
+        "available": False,
+        "ffmpeg_version": None,
+        "ffprobe_version": None,
+    }
+    if media is not None:
+        try:
+            tool_status = media.status()
+            ffmpeg = {
+                "available": tool_status.available,
+                "ffmpeg_version": tool_status.ffmpeg.version,
+                "ffprobe_version": tool_status.ffprobe.version,
+            }
+        except Exception:
+            ffmpeg["error"] = "probe_failed"
+    storage: dict[str, Any] = {"total_bytes": None, "total_files": None}
     if store is not None:
-        usage = store.storage_usage()
-        storage = {"total_bytes": usage.total_bytes, "total_files": usage.total_files}
+        try:
+            usage = store.storage_usage()
+            storage = {"total_bytes": usage.total_bytes, "total_files": usage.total_files}
+        except Exception:
+            storage["error"] = "probe_failed"
     return {
         "status": "ok",
         "environment": app_settings.env,
         "sam3_enabled": app_settings.enable_sam3,
-        "tracking": asdict(backend_status),
+        "tracking": tracking,
         "ffmpeg": ffmpeg,
         "storage": storage,
+        "analysis_readiness_url": "/ready",
     }
+
+
+@router.get("/ready", response_model=None)
+def readiness(
+    service: Annotated[ProductReadinessService, Depends(get_product_readiness_service)],
+) -> JSONResponse:
+    """Report analysis readiness without coupling process liveness to worker state."""
+    report = service.check()
+    return JSONResponse(
+        status_code=200 if report.ready else 503,
+        content=jsonable_encoder(asdict(report)),
+    )

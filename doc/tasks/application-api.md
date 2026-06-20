@@ -13,7 +13,7 @@ Application services, command/query models, error model, artifact authorization.
 
 - [x] `API-001` Create API routers and version-neutral request/response schema packages.
 - [x] `API-002` Define shared validation and error response schemas.
-- [x] `API-003` Implement `/health` with web, worker, FFmpeg, storage, and backend capability status.
+- [x] `API-003` Implement liveness-safe `/health` plus worker-aware `/ready` with database, queue, FFmpeg, storage, and backend capability status.
 - [x] `API-004` Implement video list, upload, detail, and deletion routes.
 - [x] `API-005` Implement analysis start and job-progress routes.
 - [x] `API-006` Implement camera-segment listing and calibration correction routes.

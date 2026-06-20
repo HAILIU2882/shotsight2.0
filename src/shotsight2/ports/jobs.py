@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from shotsight2.domain.jobs import ClaimedJob, QueueMessage
+from shotsight2.domain.jobs import ClaimedJob, QueueMessage, QueueRuntimeSnapshot
 from shotsight2.domain.persistence import JsonObject
 
 
@@ -49,3 +49,17 @@ class WorkerQueue(Protocol):
         checked_at: datetime,
         stale_after: timedelta,
     ) -> bool: ...
+
+
+class WorkerReadinessQuery(Protocol):
+    """Read persisted queue and worker state without exposing storage details."""
+
+    def inspect_runtime(self) -> QueueRuntimeSnapshot: ...
+
+
+class ReadinessQueryError(RuntimeError):
+    """Report whether storage was reachable when queue inspection failed."""
+
+    def __init__(self, *, database_available: bool) -> None:
+        super().__init__("Worker readiness state is unavailable")
+        self.database_available = database_available
