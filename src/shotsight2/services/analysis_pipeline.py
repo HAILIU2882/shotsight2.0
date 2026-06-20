@@ -8,15 +8,24 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Protocol
 
+from shotsight2.domain.calibration import CalibrationProposal
 from shotsight2.domain.jobs import QueueMessage
+from shotsight2.domain.media import MediaMetadata
 from shotsight2.domain.persistence import (
     AnalysisRun,
     AnalysisStage,
     Artifact,
+    Calibration,
+    CameraSegment,
     JsonObject,
+    PlayerTrack,
     ShotAttempt,
     ShotLocation,
+    Video,
 )
+from shotsight2.domain.shot_lifecycle import ShotAttemptCandidate
+from shotsight2.domain.track_association import PlayerObservationLink, PossessionFrame
+from shotsight2.domain.tracking import TrackObservation
 from shotsight2.services.analysis_jobs import AnalysisFailure
 
 LOGGER = logging.getLogger("shotsight2.pipeline")
@@ -43,10 +52,22 @@ class PipelineContext:
     backend_version: str
     configuration: JsonObject
     source_artifact_id: str = ""
+    analysis_artifact_id: str = ""
+    video: Video | None = None
+    media_metadata: MediaMetadata | None = None
     segment_ids: tuple[str, ...] = ()
+    segments: tuple[CameraSegment, ...] = ()
+    calibration_proposals: tuple[CalibrationProposal, ...] = ()
+    calibrations: tuple[Calibration, ...] = ()
+    observations: tuple[TrackObservation, ...] = ()
+    players: tuple[PlayerTrack, ...] = ()
+    player_links: tuple[PlayerObservationLink, ...] = ()
+    possession_frames: tuple[PossessionFrame, ...] = ()
+    candidates: tuple[ShotAttemptCandidate, ...] = ()
     attempts: tuple[ShotAttempt, ...] = ()
     locations: tuple[ShotLocation, ...] = ()
     artifacts: tuple[Artifact, ...] = ()
+    statistics: JsonObject | None = None
     frame_count: int = 0
     stage_results: tuple[StageResult, ...] = ()
 
@@ -75,20 +96,16 @@ class JobProgressPort(Protocol):
         """Persist monotonic progress for a running job."""
         ...
 
-    def mark_completed(self, job_id: str) -> object:
-        """Record successful completion of a running job."""
-        ...
-
-    def mark_failed(self, job_id: str, failure: AnalysisFailure) -> object:
-        """Durably persist a structured failure on the job and its run."""
-        ...
-
 
 class RunReaderPort(Protocol):
     """Narrow repository interface for loading analysis run configuration."""
 
     def get(self, run_id: str) -> AnalysisRun | None:
         """Return a run by identifier, or None when absent."""
+        ...
+
+    def fail(self, run_id: str, error: JsonObject) -> None:
+        """Mark an unpublished run failed while the worker settles its claim."""
         ...
 
 
@@ -146,6 +163,14 @@ class PipelineStageError(RuntimeError):
         self.category = category
 
 
+class PipelineExecutionError(RuntimeError):
+    """Propagate a structured pipeline failure to the claim-owning worker."""
+
+    def __init__(self, failure: AnalysisFailure) -> None:
+        super().__init__(failure.message)
+        self.failure = failure
+
+
 class AnalysisPipelineOrchestrator:
     """Wire ordered injectable stages with progress tracking, publication, and cleanup."""
 
@@ -180,8 +205,7 @@ class AnalysisPipelineOrchestrator:
                 message=f"Analysis run {message.run_id} not found",
                 stage=AnalysisStage.VALIDATING,
             )
-            self._job_service.mark_failed(message.job_id, failure)
-            return
+            raise PipelineExecutionError(failure)
 
         ctx = PipelineContext(
             job_id=message.job_id,
@@ -214,9 +238,9 @@ class AnalysisPipelineOrchestrator:
                         "error": str(exc),
                     },
                 )
-                self._job_service.mark_failed(ctx.job_id, failure)
+                self._run_repository.fail(ctx.run_id, failure.to_json())
                 self._do_cleanup(ctx, preserve_diagnostics=True)
-                return
+                raise PipelineExecutionError(failure) from exc
 
             duration = (self._clock() - stage_start).total_seconds()
             result = StageResult(
@@ -242,18 +266,28 @@ class AnalysisPipelineOrchestrator:
                 message=str(exc),
                 stage=AnalysisStage.FINALIZING,
             )
-            self._job_service.mark_failed(ctx.job_id, failure)
+            self._run_repository.fail(ctx.run_id, failure.to_json())
             self._do_cleanup(ctx, preserve_diagnostics=True)
-            return
+            raise PipelineExecutionError(failure) from exc
 
-        self._job_service.mark_completed(ctx.job_id)
         self._do_cleanup(ctx, preserve_diagnostics=False)
         LOGGER.info("pipeline_completed", extra={"job_id": ctx.job_id, "run_id": ctx.run_id})
 
     def _do_cleanup(self, ctx: PipelineContext, *, preserve_diagnostics: bool) -> None:
-        if self._cleanup is not None:
+        if self._cleanup is None:
+            return
+        try:
             self._cleanup.clean_run_temporaries(
                 ctx.video_id,
                 ctx.run_id,
                 preserve_diagnostics=preserve_diagnostics,
+            )
+        except Exception:
+            LOGGER.exception(
+                "pipeline_cleanup_failed",
+                extra={
+                    "job_id": ctx.job_id,
+                    "run_id": ctx.run_id,
+                    "preserve_diagnostics": preserve_diagnostics,
+                },
             )

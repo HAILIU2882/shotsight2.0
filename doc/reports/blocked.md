@@ -1,21 +1,5 @@
 # Blocked Work
 
-## Production Analysis Worker Composition
-
-- **Date:** 2026-06-20
-- **Module:** Analysis Pipeline Orchestrator / Release Gate
-- **Status:** Engineering work required; not an external blocker.
-- **Reason:** Upload and queue creation are live, but the worker defaults to a
-  missing handler and no production composition constructs concrete runners for
-  the ten analysis stages. The existing end-to-end test manually publishes
-  fabricated results.
-- **Impact:** An uploaded analysis job cannot currently produce real attempts,
-  outcomes, locations, or artifacts. The product must not be described as
-  end-to-end complete.
-- **Resolution work:** Implement production worker composition, job-bound media
-  resolution, concrete stage runners, exactly-once settlement, and a live
-  SQLite/filesystem/FFmpeg integration test.
-
 ## Shot Lifecycle Precision/Recall Benchmark
 
 - **Date:** 2026-06-18

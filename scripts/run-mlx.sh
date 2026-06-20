@@ -24,6 +24,7 @@ fi
 
 export SHOTSIGHT_ENABLE_SAM3=true
 export SHOTSIGHT_TRACKING_BACKEND=mlx-sam3
+export SHOTSIGHT_PYTHON_EXECUTABLE="${PROJECT_ROOT}/.venv-mlx/bin/python"
+export SHOTSIGHT_UVICORN_EXECUTABLE="${PROJECT_ROOT}/.venv-mlx/bin/uvicorn"
 
-exec "${PROJECT_ROOT}/.venv-mlx/bin/uvicorn" \
-  shotsight2.main:app --host 127.0.0.1 --port 4173 --reload
+exec "${SCRIPT_DIRECTORY}/run-native.sh"
