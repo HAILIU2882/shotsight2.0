@@ -25,10 +25,18 @@ selection.
 - [x] `PIP-011` Implement full restart as a new run after failure or tracking repair.
 - [x] `PIP-012` Record stage durations, configuration, model versions, and frame counts.
 - [x] `PIP-013` Add pipeline tests with fake stage implementations for success, failure at every stage, cleanup, and republish.
+- [x] `PIP-014` Compose the ten production stages from real local adapters without importing FastAPI.
+- [x] `PIP-015` Resolve each queue message to its uploaded original and run-specific analysis proxy.
+- [x] `PIP-016` Give the worker claim exclusive ownership of terminal job settlement.
+- [x] `PIP-017` Compensate promoted run files when a stage or final publication fails.
+- [x] `PIP-018` Add real SQLite, filesystem, FFmpeg, and worker-process integration coverage.
+- [x] `PIP-019` Launch and supervise the native web and worker processes together.
 
 ## Completion Criteria
 
 - [x] Partial results are never presented as completed analysis.
 - [x] Every stage is independently replaceable and testable.
 - [x] A full fake pipeline passes without loading media or AI models.
-
+- [x] A generated no-shot video reaches atomic publication through the production worker.
+- [x] Failed publication leaves no orphan non-diagnostic run artifacts.
+- [x] Distinct queued videos are processed from their own uploaded media.
