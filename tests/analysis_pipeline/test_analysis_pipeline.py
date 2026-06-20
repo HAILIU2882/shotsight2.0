@@ -22,6 +22,7 @@ from shotsight2.services.analysis_jobs import AnalysisFailure
 from shotsight2.services.analysis_pipeline import (
     AnalysisPipelineOrchestrator,
     PipelineContext,
+    PipelineExecutionError,
     PipelineStageError,
     PipelineStageRunner,
     StageResult,
@@ -78,9 +79,13 @@ class _FakeJobService:
 class _FakeRunRepository:
     def __init__(self, run: AnalysisRun | None) -> None:
         self._run = run
+        self.failed_errors: list[tuple[str, JsonObject]] = []
 
     def get(self, run_id: str) -> AnalysisRun | None:
         return self._run
+
+    def fail(self, run_id: str, error: JsonObject) -> None:
+        self.failed_errors.append((run_id, error))
 
 
 class _FakePublisher:
@@ -106,6 +111,12 @@ class _FakeCleanup:
 
     def clean_run_temporaries(self, video_id: str, run_id: str, *, preserve_diagnostics: bool) -> None:
         self.calls.append((video_id, run_id, preserve_diagnostics))
+
+
+class _FailingCleanup:
+    def clean_run_temporaries(self, video_id: str, run_id: str, *, preserve_diagnostics: bool) -> None:
+        del video_id, run_id, preserve_diagnostics
+        raise OSError("cleanup unavailable")
 
 
 class _PassStage:
@@ -291,7 +302,7 @@ def test_context_built_from_run() -> None:
     assert ctx.configuration == {"threshold": 0.8}
 
 
-def test_missing_run_marks_job_failed() -> None:
+def test_missing_run_propagates_failure_to_claim_owner() -> None:
     js_spy = _FakeJobService()
     orch = AnalysisPipelineOrchestrator(
         job_service=js_spy,
@@ -299,10 +310,10 @@ def test_missing_run_marks_job_failed() -> None:
         publisher=_FakePublisher(),
         stages=[(_SPEC, _PassStage())],
     )
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError) as caught:
+        orch.handle(_message())
 
-    assert len(js_spy.failed_calls) == 1
-    _, failure = js_spy.failed_calls[0]
+    failure = caught.value.failure
     assert failure.category == "RUN_NOT_FOUND"
     assert failure.stage is AnalysisStage.VALIDATING
 
@@ -507,7 +518,8 @@ def test_failure_stops_pipeline_immediately() -> None:
         publisher=_FakePublisher(),
         stages=stages,
     )
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert run_count[0] == 0
 
 
@@ -519,32 +531,35 @@ def test_failure_records_correct_stage() -> None:
             (_SPEC3, _PassStage()),
         ]
     )
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError) as caught:
+        orch.handle(_message())
 
-    assert len(js.failed_calls) == 1
-    _, failure = js.failed_calls[0]
+    failure = caught.value.failure
     assert failure.stage is AnalysisStage.PREPROCESSING
     assert failure.category == "MEDIA_ERROR"
 
 
 def test_plain_exception_uses_class_name_as_category() -> None:
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _RuntimeFailStage())])
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError) as caught:
+        orch.handle(_message())
 
-    assert len(js.failed_calls) == 1
-    _, failure = js.failed_calls[0]
+    failure = caught.value.failure
     assert failure.category == "RuntimeError"
 
 
-def test_no_completed_on_stage_failure() -> None:
+def test_stage_failure_is_not_settled_by_pipeline() -> None:
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _FailStage())])
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert js.completed_calls == []
+    assert js.failed_calls == []
 
 
 def test_no_publish_on_stage_failure() -> None:
     orch, _, pub, _ = _orchestrator(stages=[(_SPEC, _FailStage())])
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert pub.calls == []
 
 
@@ -583,14 +598,15 @@ def test_failure_at_every_stage_index(fail_at: int) -> None:
         publisher=_FakePublisher(),
         stages=stages,
     )
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
 
     # Stages before fail_at ran; stages after did not
     for i in range(fail_at):
         assert run_flags[i], f"Stage {i} should have run (fail_at={fail_at})"
     for i in range(fail_at + 1, 10):
         assert not run_flags[i], f"Stage {i} should NOT have run (fail_at={fail_at})"
-    assert len(js.failed_calls) == 1
+    assert js.failed_calls == []
     assert js.completed_calls == []
 
 
@@ -612,7 +628,8 @@ def test_cleanup_called_on_success_without_preserving_diagnostics() -> None:
 
 def test_cleanup_called_on_failure_preserving_diagnostics() -> None:
     orch, _, _, cl = _orchestrator(stages=[(_SPEC, _FailStage())])
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
 
     assert len(cl.calls) == 1
     _, _, preserve = cl.calls[0]
@@ -639,8 +656,39 @@ def test_cleanup_called_exactly_once_on_success() -> None:
 
 def test_cleanup_called_exactly_once_on_failure() -> None:
     orch, _, _, cl = _orchestrator(stages=[(_SPEC, _FailStage()), (_SPEC2, _PassStage())])
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert len(cl.calls) == 1
+
+
+def test_cleanup_failure_does_not_reverse_successful_publication() -> None:
+    publisher = _FakePublisher()
+    orchestrator = AnalysisPipelineOrchestrator(
+        job_service=_FakeJobService(),
+        run_repository=_FakeRunRepository(_run()),
+        publisher=publisher,
+        stages=[(_SPEC, _PassStage())],
+        cleanup=_FailingCleanup(),
+    )
+
+    orchestrator.handle(_message())
+
+    assert publisher.calls == [(_RUN_ID, 0, 0, 0)]
+
+
+def test_cleanup_failure_does_not_mask_stage_failure() -> None:
+    orchestrator = AnalysisPipelineOrchestrator(
+        job_service=_FakeJobService(),
+        run_repository=_FakeRunRepository(_run()),
+        publisher=_FakePublisher(),
+        stages=[(_SPEC, _FailStage("tracking failed", "TRACKING_FAILED"))],
+        cleanup=_FailingCleanup(),
+    )
+
+    with pytest.raises(PipelineExecutionError) as caught:
+        orchestrator.handle(_message())
+
+    assert caught.value.failure.category == "TRACKING_FAILED"
 
 
 # ===========================================================================
@@ -666,10 +714,10 @@ def test_publish_failure_marks_job_failed() -> None:
     pub = _FakePublisher()
     pub.should_raise = OSError("disk full")
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _PassStage())], publisher=pub)
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError) as caught:
+        orch.handle(_message())
 
-    assert len(js.failed_calls) == 1
-    _, failure = js.failed_calls[0]
+    failure = caught.value.failure
     assert failure.category == "OSError"
     assert failure.stage is AnalysisStage.FINALIZING
 
@@ -678,7 +726,8 @@ def test_publish_failure_cleans_with_preserved_diagnostics() -> None:
     pub = _FakePublisher()
     pub.should_raise = OSError("disk full")
     orch, _, _, cl = _orchestrator(stages=[(_SPEC, _PassStage())], publisher=pub)
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
 
     assert len(cl.calls) == 1
     _, _, preserve = cl.calls[0]
@@ -689,7 +738,8 @@ def test_no_mark_completed_on_publish_failure() -> None:
     pub = _FakePublisher()
     pub.should_raise = RuntimeError("publication error")
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _PassStage())], publisher=pub)
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert js.completed_calls == []
 
 
@@ -739,7 +789,8 @@ def test_publish_not_called_when_first_stage_fails() -> None:
         publisher=pub,
         stages=[(_SPEC, _FailStage()), (_SPEC2, _PassStage())],
     )
-    orch.handle(_message())
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
     assert pub.calls == []
 
 
@@ -774,6 +825,9 @@ def test_two_independent_runs_do_not_share_context() -> None:
     class _MultiRunRepo:
         def get(self, run_id: str) -> AnalysisRun | None:
             return run_a if run_id == "run-1" else run_b
+
+        def fail(self, run_id: str, error: JsonObject) -> None:
+            del run_id, error
 
     orch = AnalysisPipelineOrchestrator(
         job_service=_FakeJobService(),
@@ -894,25 +948,29 @@ def test_stage_result_duration_uses_clock() -> None:
 
 
 # ===========================================================================
-# PIP-013 — mark_completed called on full success
+# PIP-013 — worker owns terminal settlement
 # ===========================================================================
 
 
-def test_mark_completed_called_on_success() -> None:
+def test_pipeline_does_not_settle_job_on_success() -> None:
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _PassStage())])
     orch.handle(_message())
-    assert js.completed_calls == [_JOB_ID]
-
-
-def test_mark_completed_not_called_on_failure() -> None:
-    orch, js, _, _ = _orchestrator(stages=[(_SPEC, _FailStage())])
-    orch.handle(_message())
     assert js.completed_calls == []
+    assert js.failed_calls == []
+
+
+def test_pipeline_does_not_settle_job_on_failure() -> None:
+    orch, js, _, _ = _orchestrator(stages=[(_SPEC, _FailStage())])
+    with pytest.raises(PipelineExecutionError):
+        orch.handle(_message())
+    assert js.completed_calls == []
+    assert js.failed_calls == []
 
 
 def test_pipeline_stage_error_category_propagates() -> None:
     orch, js, _, _ = _orchestrator(stages=[(_SPEC, _FailStage("msg", "TRACKING_BACKEND_UNAVAILABLE"))])
-    orch.handle(_message())
-    _, failure = js.failed_calls[0]
+    with pytest.raises(PipelineExecutionError) as caught:
+        orch.handle(_message())
+    failure = caught.value.failure
     assert failure.category == "TRACKING_BACKEND_UNAVAILABLE"
     assert failure.message == "msg"

@@ -226,6 +226,8 @@ def test_worker_cli_starts_independently_from_fastapi(tmp_path: Path) -> None:
             "shotsight2.worker",
             "--database",
             str(database_path),
+            "--data-dir",
+            str(tmp_path / "worker-data"),
             "--worker-id",
             "cli-worker",
             "--once",
@@ -266,6 +268,8 @@ def test_worker_cli_wiring_and_handler_validation(tmp_path: Path) -> None:
             [
                 "--database",
                 str(database_path),
+                "--data-dir",
+                str(tmp_path / "direct-worker-data"),
                 "--worker-id",
                 "direct-cli-worker",
                 "--once",

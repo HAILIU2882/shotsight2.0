@@ -18,6 +18,7 @@ from shotsight2.adapters.sqlite_queue import SQLiteWorkerQueue
 from shotsight2.config import settings
 from shotsight2.domain.jobs import QueueMessage
 from shotsight2.worker.process import PollingBackoff, WorkerProcess
+from shotsight2.worker.runtime import create_production_handler
 
 
 def _database_path(value: str) -> Path:
@@ -25,13 +26,7 @@ def _database_path(value: str) -> Path:
     return Path(value.removeprefix(prefix)) if value.startswith(prefix) else Path(value)
 
 
-def _missing_handler(message: QueueMessage) -> None:
-    raise RuntimeError(f"No analysis handler configured for job {message.job_id}")
-
-
-def _load_handler(import_path: str | None) -> Callable[[QueueMessage], None]:
-    if import_path is None:
-        return _missing_handler
+def _load_handler(import_path: str) -> Callable[[QueueMessage], None]:
     module_name, separator, attribute = import_path.partition(":")
     if not separator or not module_name or not attribute:
         raise ValueError("Handler must use the form module:attribute")
@@ -45,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the independently testable worker CLI parser."""
     parser = argparse.ArgumentParser(prog="shotsight-worker")
     parser.add_argument("--database", default=settings.database_url)
+    parser.add_argument("--data-dir", type=Path, default=settings.data_dir)
     parser.add_argument("--worker-id", default=f"{socket.gethostname()}-{threading.get_native_id()}")
     parser.add_argument("--handler", help="Analysis callable as module:attribute")
     parser.add_argument("--once", action="store_true", help="Attempt one claim and exit")
@@ -66,9 +62,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     database = SQLiteDatabase(_database_path(str(arguments.database)))
     database.migrate()
     queue = SQLiteWorkerQueue(database)
+    import_path = cast(str | None, arguments.handler)
+    handler = (
+        _load_handler(import_path)
+        if import_path is not None
+        else create_production_handler(database=database, data_dir=Path(arguments.data_dir))
+    )
     worker = WorkerProcess(
         queue,
-        _load_handler(cast(str | None, arguments.handler)),
+        handler,
         worker_id=str(arguments.worker_id),
         stale_after=timedelta(seconds=float(arguments.stale_seconds)),
         heartbeat_interval=timedelta(seconds=float(arguments.heartbeat_seconds)),

@@ -621,3 +621,53 @@ mkdir -p /Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2
 - Repeatable five-second benchmark: 10 sampled frames, 10.03 seconds elapsed, 1.00 processing FPS, 0.6 ball coverage, six basketball observations, and zero reported identity switches.
 - Full validation: 446 tests passed with 91.83% total coverage; strict mypy passed for 149 source files; Ruff lint and format checks passed; `git diff --check` passed.
 - No ground-truth ball labels exist yet, so this closes runtime implementation and execution tasks without claiming tracking accuracy.
+
+### Production Analysis Worker Corrective Integration
+
+- Completed on 2026-06-20 with a FastAPI-free production worker composition.
+- The worker now resolves each `QueueMessage` through SQLite to that video's
+  original artifact, creates a run-specific proxy, and executes validation,
+  preprocessing, camera segmentation, automatic calibration, tracking, shot
+  detection/outcome classification, indicative mapping, rendering, statistics,
+  and finalization in order.
+- Terminal ownership is exact: the pipeline updates run progress and
+  publication/failure, while `WorkerProcess` alone acknowledges or fails its
+  claimed job. No production path marks the same claim terminal twice.
+- Promoted proxy, calibration-frame, track, and render outputs are compensated
+  after a failed stage or publication. Successful runs retain published files
+  and remove temporary work; failed runs may retain only diagnostic reports.
+- `scripts/run.sh` and `scripts/run-mlx.sh` now use `scripts/run-native.sh` to
+  supervise the web server and worker as one native application lifecycle.
+
+Focused real-adapter validation:
+
+- Command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/e2e/test_production_pipeline.py tests/analysis_pipeline tests/worker_queue -vv`
+- Result: 66 tests passed, including four production-worker integrations and
+  cleanup-error settlement regressions.
+- A generated 2.4-second, 160x90 no-shot video produced one or more stable
+  camera records, zero attempts, a published completed run, analysis proxy,
+  tracking data, annotated video, chart/heatmap outputs, and render metadata.
+- A corrupt uploaded artifact failed both its job and run without
+  `ClaimLostError`.
+- Sequential 160x90 and 128x96 uploads produced annotated videos at exactly
+  their own dimensions, proving job-bound media resolution.
+- An injected publication failure after real rendering left the video inventory
+  with only its original upload and no published artifact rows.
+
+Native process smoke:
+
+- `scripts/run-native.sh` started Uvicorn on `127.0.0.1:4187` and a separate
+  worker against an isolated temporary database.
+- `GET /health` returned HTTP 200; SQLite reported the worker heartbeat as
+  active.
+- One `Ctrl-C` stopped both processes, the worker logged `worker_stopped`,
+  SQLite recorded `stopped_at`, and port 4187 no longer accepted connections.
+
+Full quality gates:
+
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 450 tests, 92.51% total coverage.
+- Strict mypy passed with no issues in 152 source files.
+- Ruff lint passed; Ruff format check reported 155 files formatted.
+- Native shell syntax checks and `git diff --check` passed.
