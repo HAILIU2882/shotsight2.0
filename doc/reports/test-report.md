@@ -621,3 +621,19 @@ Full quality gates:
 - Strict mypy passed with no issues in 152 source files.
 - Ruff lint passed; Ruff format check reported 155 files formatted.
 - Native shell syntax checks and `git diff --check` passed.
+
+### Worker-Aware Product Readiness
+
+- Completed on 2026-06-20 without adding schema or fabricated worker metadata.
+- `/health` remains a liveness-safe HTTP 200 endpoint and advertises `/ready`.
+- `/ready` returns structured database, queue, and worker state, using the most
+  recent active worker heartbeat ahead of newer stopped-worker records.
+- HTTP 200 means analysis-ready. Missing, stale, stopped, database-unavailable,
+  or queue-unavailable states return HTTP 503 without raising an API error.
+- Deterministic tests cover no worker, fresh heartbeat, stale boundary,
+  graceful stop, active-versus-newer-stopped precedence, database failure, and
+  queue failure.
+- Focused validation passed: 21 tests across health, app runtime, and SQLite
+  queue behavior.
+- Full validation passed: 468 tests with 92.64% total coverage; strict mypy
+  passed for 153 source files; Ruff lint and format checks passed for 156 files.

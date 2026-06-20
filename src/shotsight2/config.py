@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     mlx_model_path: Path | None = None
     sam3_model_path: Path | None = None
     cpu_tracking_model_path: Path | None = None
+    worker_readiness_stale_seconds: float = Field(default=30.0, gt=0)
 
 
 settings = Settings()
