@@ -5,34 +5,40 @@
 - **Date:** 2026-06-21
 - **Module:** Shot Lifecycle
 - **Blocked item:** `SHT-014`
-- **Status:** Local annotation, timestamp matching, export, and comparison
-  interfaces are implemented; precision/recall metrics are blocked.
-- **Reason:** No authorized ground-truth annotation file has been created.
-  Labels are intentionally private and outside Git at
-  `/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`.
-- **Verified with:** Deterministic tests prove the lifecycle evaluator counts
-  every release, including `UNOBSERVABLE`, through the shared schema.
-- **Impact:** Deterministic lifecycle state-machine scenarios are tested, but
-  real-video release-event precision and recall are not claimed.
-- **Unblock condition:** Create the authorized private annotation file, export
-  automatic attempts for the same video, and run the exact annotate, match, and
-  lifecycle evaluation commands in `doc/tasks/shot-lifecycle.md`.
+- **Status:** The private real-video benchmark was executed, but acceptance
+  failed.
+- **Reason:** The 15 human-annotated releases had zero automatic attempts and
+  zero matches. Recall is `0.0`; precision is unavailable (`null`,
+  `precision_defined: false`) because no releases were predicted.
+- **Verified with:** MLX SAM3 run `21b94461-123b-4a19-a775-a253812339eb`
+  produced 58 basketball observations over 912 frames (`0.064` coverage),
+  average ball confidence `0.67`, and zero rim observations. Runtime was
+  2026-06-20T21:37:07.873170Z through 2026-06-20T21:52:25.595485Z
+  (917.72 seconds) for 91.228 seconds of source video. No OpenCV detector
+  metrics are used for this baseline.
+- **Impact:** Shot-event precision cannot be measured and recall fails at zero;
+  the module checklist remains incomplete and the product is not ready.
+- **Unblock condition:** Produce SAM3 automatic release attempts on the private
+  benchmark and pass the lifecycle acceptance criteria on a rerun.
 
 ## Outcome Classification Accuracy and Calibration Benchmark
 
-- **Date:** 2026-06-20
+- **Date:** 2026-06-21
 - **Module:** Outcome Classification
 - **Blocked item:** `OUT-010`
-- **Status:** Shared-schema matching and comparison interfaces are implemented;
-  make/miss accuracy and uncertainty calibration metrics are blocked.
-- **Reason:** No authorized ground-truth labels or matching automatic prediction
-  file has been created. Labels remain intentionally outside Git.
-- **Verified with:** Deterministic tests prove `UNOBSERVABLE` labels are reported
-  with an explicit excluded count and omitted from outcome metrics.
-- **Impact:** Deterministic outcome classification scenarios are tested, but
-  real-video make/miss accuracy and confidence calibration are not claimed.
-- **Unblock condition:** Complete the private annotation and matching workflow,
-  then run the exact outcome command in `doc/tasks/outcome-classification.md`.
+- **Status:** The private real-video benchmark was executed, but acceptance
+  failed.
+- **Reason:** All 15 human outcomes were observable (6 made and 9 missed), but
+  the SAM3 run produced zero automatic attempts. There are no matched certain
+  predictions, so make/miss accuracy is unavailable (`null`,
+  `make_miss_accuracy_defined: false`), not a measured `0%`.
+- **Verified with:** The same MLX SAM3 run and lifecycle evidence above; no
+  OpenCV detector metrics are used for this baseline.
+- **Impact:** Outcome accuracy, uncertainty calibration, and confidence
+  calibration cannot be measured; the module checklist remains incomplete and
+  the product is not ready.
+- **Unblock condition:** Produce matched SAM3 attempts with certain outcome
+  predictions and pass outcome accuracy/calibration acceptance on a rerun.
 
 ## Artifact Rendering Real-Video Visual Regression
 

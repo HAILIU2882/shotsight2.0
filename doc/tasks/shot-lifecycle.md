@@ -13,6 +13,9 @@ Ball tracks, player association, rim geometry, camera-segment boundaries.
 - [x] `SHT-001` Define lifecycle states, events, evidence, confidence, and attempt-candidate models.
 - [x] `SHT-002` Implement possessed-ball state entry and exit rules.
 - [x] `SHT-003` Detect release as ball separation from the associated shooter.
+  - The first free-ball observation must occur within the configured release
+    window after the final possessed observation; an expired window is retained
+    as deterministic ignored-release evidence.
 - [x] `SHT-004` Reject shooting motion without ball release.
 - [x] `SHT-005` Track free-flight observations after release.
 - [x] `SHT-006` Detect immediate blocks after a valid release.
@@ -28,7 +31,13 @@ Ball tracks, player association, rim geometry, camera-segment boundaries.
     the local annotation and deterministic timestamp-matching workflow.
   - `scripts/evaluate_shot_lifecycle.py` counts every annotated release,
     including releases whose outcome is `UNOBSERVABLE`.
-  - Blocked: no authorized ground-truth annotation file has been created.
+  - When predictions are empty but ground truth is not, precision is JSON
+    `null` with `precision_defined: false`; recall remains numeric. Empty truth
+    and empty predictions use the documented perfect-agreement convention of
+    precision and recall both equal to `1.0`.
+  - The private SAM3 benchmark was executed, but acceptance failed: 15 human
+    releases produced zero automatic attempts, so precision is unavailable and
+    recall is `0.0`. This item remains incomplete.
 
 ## Local Benchmark Workflow
 

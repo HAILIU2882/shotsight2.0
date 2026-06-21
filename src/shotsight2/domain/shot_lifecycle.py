@@ -61,6 +61,7 @@ class IgnoredReleaseReason(StrEnum):
     NOT_SHOT_MOTION = "not_shot_motion"
     UNSTABLE_SEGMENT = "unstable_segment"
     INSUFFICIENT_POSSESSION = "insufficient_possession"
+    RELEASE_WINDOW_EXPIRED = "release_window_expired"
 
 
 @dataclass(frozen=True, slots=True)

@@ -31,18 +31,40 @@ class ShotEventEvaluation:
     extra: tuple[ShotEvent, ...]
 
     @property
-    def precision(self) -> float:
-        """Return release precision."""
+    def precision(self) -> float | None:
+        """Return release precision, or ``None`` when it is undefined."""
 
-        denominator = len(self.matches) + len(self.extra)
-        return len(self.matches) / denominator if denominator else 1.0
+        predicted_count = len(self.matches) + len(self.extra)
+        ground_truth_count = len(self.matches) + len(self.missed)
+        if predicted_count:
+            return len(self.matches) / predicted_count
+        if not ground_truth_count:
+            return 1.0
+        return None
 
     @property
-    def recall(self) -> float:
-        """Return release recall."""
+    def precision_defined(self) -> bool:
+        """Return whether precision has a numeric value."""
 
-        denominator = len(self.matches) + len(self.missed)
-        return len(self.matches) / denominator if denominator else 1.0
+        return self.precision is not None
+
+    @property
+    def recall(self) -> float | None:
+        """Return release recall, or ``None`` when it is undefined."""
+
+        ground_truth_count = len(self.matches) + len(self.missed)
+        predicted_count = len(self.matches) + len(self.extra)
+        if ground_truth_count:
+            return len(self.matches) / ground_truth_count
+        if not predicted_count:
+            return 1.0
+        return None
+
+    @property
+    def recall_defined(self) -> bool:
+        """Return whether recall has a numeric value."""
+
+        return self.recall is not None
 
     def to_json(self) -> dict[str, object]:
         """Return a stable JSON report."""
@@ -54,7 +76,9 @@ class ShotEventEvaluation:
             "predicted_releases": len(self.matches) + len(self.extra),
             "matched_releases": len(self.matches),
             "precision": self.precision,
+            "precision_defined": self.precision_defined,
             "recall": self.recall,
+            "recall_defined": self.recall_defined,
             "matches": [
                 {
                     "expected_id": expected.event_id,

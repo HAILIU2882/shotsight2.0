@@ -224,6 +224,22 @@ class ShotLifecycleService:
                 index += 1
                 continue
 
+            release_elapsed = ball.timestamp_seconds - possession_run[-1].timestamp_seconds
+            if release_elapsed > self._config.release_window_seconds:
+                ignored.append(
+                    _ignored_release(
+                        segment.id,
+                        ball,
+                        possession_owner,
+                        IgnoredReleaseReason.RELEASE_WINDOW_EXPIRED,
+                        possession_run,
+                    )
+                )
+                possession_owner = None
+                possession_run = []
+                index += 1
+                continue
+
             candidate = self._evaluate_release(
                 analysis_run_id=analysis_run_id,
                 segment=segment,

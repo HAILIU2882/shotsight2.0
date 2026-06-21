@@ -64,6 +64,9 @@ class OutcomeEvaluation:
         uncertain = tuple((label, prediction) for label, prediction in matched if prediction.outcome == "UNCERTAIN")
         correct = tuple((label, prediction) for label, prediction in certain if label.outcome == prediction.outcome)
         incorrect = tuple((label, prediction) for label, prediction in certain if label.outcome != prediction.outcome)
+        make_miss_accuracy = len(correct) / len(certain) if certain else None
+        certain_coverage = len(certain) / len(matched) if matched else None
+        uncertainty_rate = len(uncertain) / len(matched) if matched else None
         return {
             "status": "evaluated",
             "ground_truth_attempts": len(self.labels),
@@ -76,9 +79,12 @@ class OutcomeEvaluation:
             "uncertain_predictions": len(uncertain),
             "missing_predictions": [item.attempt_id for item in missing_predictions],
             "extra_predictions": [item.attempt_id for item in extra_predictions],
-            "make_miss_accuracy": len(correct) / len(certain) if certain else 0.0,
-            "certain_coverage": len(certain) / len(matched) if matched else 0.0,
-            "uncertainty_rate": len(uncertain) / len(matched) if matched else 0.0,
+            "make_miss_accuracy": make_miss_accuracy,
+            "make_miss_accuracy_defined": make_miss_accuracy is not None,
+            "certain_coverage": certain_coverage,
+            "certain_coverage_defined": certain_coverage is not None,
+            "uncertainty_rate": uncertainty_rate,
+            "uncertainty_rate_defined": uncertainty_rate is not None,
             "mean_confidence_correct": _mean(prediction.confidence for _, prediction in correct),
             "mean_confidence_incorrect": _mean(prediction.confidence for _, prediction in incorrect),
             "calibration_bins": _calibration_bins(certain),
@@ -177,9 +183,9 @@ def _outcome(record: dict[str, Any], index: int) -> str:
     return value.upper()
 
 
-def _mean(values: Iterable[float]) -> float:
+def _mean(values: Iterable[float]) -> float | None:
     items = tuple(values)
-    return sum(items) / len(items) if items else 0.0
+    return sum(items) / len(items) if items else None
 
 
 def _ensure_unique_ids(values: Iterable[str], *, kind: str) -> None:
@@ -205,7 +211,7 @@ def _calibration_bins(pairs: Iterable[tuple[OutcomeLabel, OutcomePrediction]]) -
                 "accuracy": (
                     sum(1 for label, prediction in bucket if label.outcome == prediction.outcome) / len(bucket)
                     if bucket
-                    else 0.0
+                    else None
                 ),
             }
         )

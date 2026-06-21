@@ -24,6 +24,8 @@ Shot lifecycle candidates, ball track, calibrated rim geometry.
   - `scripts/evaluate_outcome_classification.py` accepts the shared annotation
     schema, reports the explicit `excluded_unobservable_attempts` count, and
     excludes those rows from make/miss accuracy and calibration metrics.
+  - Accuracy and matched-prediction rates are JSON `null` with explicit
+    `*_defined: false` flags when their denominators are empty.
 
 ## Completion Criteria
 
@@ -34,10 +36,11 @@ Shot lifecycle candidates, ball track, calibrated rim geometry.
 ## Blocked
 
 - `OUT-010` has an evaluation interface in
-  `scripts/evaluate_outcome_classification.py`, but benchmark metrics remain
-  blocked because no authorized ground-truth labels or matching automatic
-  predictions have been created. Labels are intentionally stored outside Git
-  at `/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/annotations.json`.
+  `scripts/evaluate_outcome_classification.py`, and the private benchmark was
+  executed against 15 observable outcomes (6 made and 9 missed). The SAM3 run
+  produced zero automatic attempts, leaving no matched certain predictions;
+  make/miss accuracy and calibration are unavailable rather than measured at
+  zero. The benchmark fails acceptance, so this item remains incomplete.
 
 ## Local Evaluation Command
 
