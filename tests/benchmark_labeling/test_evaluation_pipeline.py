@@ -31,6 +31,73 @@ def test_matcher_rejects_invalid_tolerance() -> None:
         match_attempts((), (), tolerance_seconds=float("nan"))
 
 
+def test_lifecycle_zero_predictions_does_not_report_perfect_precision() -> None:
+    report = lifecycle_evaluator.evaluate_events(
+        (lifecycle_evaluator.ShotEvent(1.0, "shot-001"),),
+        (),
+        tolerance_seconds=0.25,
+    ).to_json()
+
+    assert report["precision"] is None
+    assert report["precision_defined"] is False
+    assert report["recall"] == 0.0
+    assert report["recall_defined"] is True
+    assert json.loads(json.dumps(report))["precision"] is None
+
+
+def test_lifecycle_empty_inputs_use_documented_perfect_agreement_convention() -> None:
+    report = lifecycle_evaluator.evaluate_events((), (), tolerance_seconds=0.25).to_json()
+
+    assert report["precision"] == 1.0
+    assert report["precision_defined"] is True
+    assert report["recall"] == 1.0
+    assert report["recall_defined"] is True
+
+
+def test_lifecycle_prediction_without_truth_has_undefined_recall() -> None:
+    report = lifecycle_evaluator.evaluate_events(
+        (),
+        (lifecycle_evaluator.ShotEvent(1.0, "prediction-001"),),
+        tolerance_seconds=0.25,
+    ).to_json()
+
+    assert report["precision"] == 0.0
+    assert report["precision_defined"] is True
+    assert report["recall"] is None
+    assert report["recall_defined"] is False
+
+
+def test_outcome_accuracy_is_unavailable_without_matched_certain_predictions() -> None:
+    report = outcome_evaluator.evaluate(
+        (outcome_evaluator.OutcomeLabel("shot-001", "MADE"),),
+        (),
+    ).to_json()
+
+    assert report["matched_attempts"] == 0
+    assert report["make_miss_accuracy"] is None
+    assert report["make_miss_accuracy_defined"] is False
+    assert report["certain_coverage"] is None
+    assert report["certain_coverage_defined"] is False
+    assert report["uncertainty_rate"] is None
+    assert report["uncertainty_rate_defined"] is False
+    assert json.loads(json.dumps(report))["make_miss_accuracy"] is None
+
+
+def test_outcome_accuracy_is_unavailable_when_all_matched_predictions_are_uncertain() -> None:
+    report = outcome_evaluator.evaluate(
+        (outcome_evaluator.OutcomeLabel("shot-001", "MADE"),),
+        (outcome_evaluator.OutcomePrediction("shot-001", "UNCERTAIN", 0.4),),
+    ).to_json()
+
+    assert report["matched_attempts"] == 1
+    assert report["make_miss_accuracy"] is None
+    assert report["make_miss_accuracy_defined"] is False
+    assert report["certain_coverage"] == 0.0
+    assert report["certain_coverage_defined"] is True
+    assert report["uncertainty_rate"] == 1.0
+    assert report["uncertainty_rate_defined"] is True
+
+
 def test_export_schema_drives_both_evaluators_and_excludes_unobservable(tmp_path: Path) -> None:
     annotation_path = tmp_path / "annotations.json"
     automatic_path = tmp_path / "automatic.json"

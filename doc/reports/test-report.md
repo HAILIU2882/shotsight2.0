@@ -788,3 +788,42 @@ Full quality gates:
   passed with no issues in 160 source files.
 - Ruff lint passed across `src`, `tests`, and `scripts`; Ruff format check
   reported 165 files already formatted.
+
+### SAM3 Real-Video Benchmark Baseline
+
+- Executed on 2026-06-20 using MLX SAM3 only, run
+  `21b94461-123b-4a19-a775-a253812339eb`. This baseline does not use or claim
+  OpenCV detector metrics.
+- Private ground truth contains 15 released shots with observable outcomes: 6
+  made and 9 missed. Labels and private filesystem paths remain outside Git.
+- The run produced zero automatic attempts. Lifecycle evaluation therefore has
+  15 ground-truth releases, zero predictions, zero matches, precision `null`
+  with `precision_defined: false`, and recall `0.0` with
+  `recall_defined: true`.
+- Outcome evaluation has 15 outcome-evaluable attempts and no matched certain
+  predictions. Make/miss accuracy is `null` with
+  `make_miss_accuracy_defined: false`; accuracy and calibration are
+  unavailable, not measured at `0%`.
+- Tracking evidence was 58 basketball observations over 912 frames (`0.064`
+  coverage), average ball confidence `0.67`, and zero rim observations.
+- Runtime was 2026-06-20T21:37:07.873170Z through
+  2026-06-20T21:52:25.595485Z (917.72 seconds) for 91.228 seconds of source
+  video.
+- Acceptance result: failed. `SHT-014` and `OUT-010` remain unchecked, both
+  modules remain incomplete, the overall release remains incomplete, and the
+  product is not ready.
+- Evaluator convention: when lifecycle ground truth and predictions are both
+  empty, precision and recall are both defined as `1.0` for perfect empty-set
+  agreement. A nonempty truth set with zero predictions does not use that
+  convention.
+
+### Benchmark Metric Semantics Validation
+
+- Focused benchmark-labeling validation passed: 14 tests.
+- Full pytest passed: 496 tests. The first collection attempt used the default
+  application data directory and could not create SQLite state in the
+  read-only external worktree; redirecting runtime data and tool caches to
+  `/private/tmp` resolved the environment issue without a code change.
+- Full package coverage passed at 92.58%, above the required 80% threshold.
+- Strict mypy passed with no issues in 163 source files.
+- Ruff lint passed, and Ruff format check reported 168 files already formatted.

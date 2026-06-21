@@ -28,7 +28,13 @@ Ball tracks, player association, rim geometry, camera-segment boundaries.
     the local annotation and deterministic timestamp-matching workflow.
   - `scripts/evaluate_shot_lifecycle.py` counts every annotated release,
     including releases whose outcome is `UNOBSERVABLE`.
-  - Blocked: no authorized ground-truth annotation file has been created.
+  - When predictions are empty but ground truth is not, precision is JSON
+    `null` with `precision_defined: false`; recall remains numeric. Empty truth
+    and empty predictions use the documented perfect-agreement convention of
+    precision and recall both equal to `1.0`.
+  - The private SAM3 benchmark was executed, but acceptance failed: 15 human
+    releases produced zero automatic attempts, so precision is unavailable and
+    recall is `0.0`. This item remains incomplete.
 
 ## Local Benchmark Workflow
 
