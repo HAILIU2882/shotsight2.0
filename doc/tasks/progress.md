@@ -43,9 +43,18 @@
 
 - [ ] All 22 module checklists are complete.
 - [x] End-to-end upload, analysis, review, reanalysis, and deletion tests pass. The combined release gate uses the real HTTP presentation routes, SQLite queue, production worker pipeline, FFmpeg/OpenCV adapters, review corrections, reanalysis publication, and confirmed deletion.
-- [ ] Vision benchmark metrics are documented for every supported backend.
-- [ ] macOS, Windows, and Linux installation smoke tests pass.
+- [ ] The required MLX SAM3 vision benchmark passes. The real benchmark is
+  documented, but zero automatic attempts means lifecycle and outcome
+  acceptance failed.
+- [x] The current-phase macOS installation and runtime smoke tests pass.
+- [ ] Windows and Linux installation smoke tests pass. These platforms are
+  explicitly deferred by `doc/prompt.md` during the current macOS phase and
+  are not silently claimed as validated.
 - [ ] The requirements traceability matrix has no unimplemented requirement.
+
+The overall release remains incomplete and the product is not ready while the
+SAM3 lifecycle/outcome benchmark fails and the linked module checklists remain
+unchecked.
 
 ## Product Readiness Hardening
 
