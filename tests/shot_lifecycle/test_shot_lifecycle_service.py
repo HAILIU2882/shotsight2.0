@@ -24,7 +24,12 @@ from shotsight2.domain.tracking import (
     TrackObservation,
     VisibilityState,
 )
-from shotsight2.services.shot_lifecycle import ShotLifecycleResult, ShotLifecycleService, rim_geometry
+from shotsight2.services.shot_lifecycle import (
+    ShotLifecycleConfig,
+    ShotLifecycleResult,
+    ShotLifecycleService,
+    rim_geometry,
+)
 
 NOW = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)
 
@@ -114,6 +119,51 @@ def test_repeated_rim_observations_do_not_duplicate_one_release_lifecycle() -> N
     assert len(result.candidates) == 1
 
 
+@pytest.mark.parametrize("release_seconds", [1.499999, 1.5], ids=["just-inside", "exactly-at"])
+def test_release_within_configured_window_remains_valid(release_seconds: float) -> None:
+    observations = _balls_at(
+        ((100, 118), (100, 112), (100, 96), (100, 70), (100, 34)),
+        (0.8, 1.0, release_seconds, release_seconds + 0.2, release_seconds + 0.4),
+    )
+
+    result = ShotLifecycleService(config=ShotLifecycleConfig(release_window_seconds=0.5)).detect(
+        analysis_run_id="run-1",
+        segments=(_segment(),),
+        observations=observations,
+        possession_frames=_possession(observations),
+        calibrations=(_calibration(),),
+    )
+
+    assert len(result.candidates) == 1
+    assert result.candidates[0].release_seconds == release_seconds
+    assert result.ignored_releases == ()
+
+
+def test_release_beyond_configured_window_is_ignored_and_resets_possession() -> None:
+    release_seconds = 1.500001
+    observations = _balls_at(
+        ((100, 118), (100, 112), (100, 96), (100, 70), (100, 34)),
+        (0.8, 1.0, release_seconds, release_seconds + 0.2, release_seconds + 0.4),
+    )
+
+    result = ShotLifecycleService(config=ShotLifecycleConfig(release_window_seconds=0.5)).detect(
+        analysis_run_id="run-1",
+        segments=(_segment(),),
+        observations=observations,
+        possession_frames=_possession(observations),
+        calibrations=(_calibration(),),
+    )
+
+    assert result.candidates == ()
+    assert len(result.ignored_releases) == 1
+    ignored = result.ignored_releases[0]
+    assert ignored.reason.value == "release_window_expired"
+    assert ignored.timestamp_seconds == release_seconds
+    assert ignored.ball_observation_id == "ball-2"
+    assert ignored.shooter_track_id == "player-1"
+    assert ignored.evidence_observation_ids == ("ball-0", "ball-1", "ball-2")
+
+
 def test_lifecycle_does_not_cross_unstable_camera_range() -> None:
     observations = _balls(((100, 118), (100, 112), (100, 96), (100, 70), (100, 34)), segment_id="unstable-1")
     result = ShotLifecycleService().detect(
@@ -164,13 +214,33 @@ def _balls(points: Sequence[tuple[float, float]], *, segment_id: str = "segment-
     return tuple(_ball(index, point[0], point[1], segment_id=segment_id) for index, point in enumerate(points))
 
 
-def _ball(index: int, x: float, y: float, *, segment_id: str) -> TrackObservation:
+def _balls_at(
+    points: Sequence[tuple[float, float]],
+    timestamps: Sequence[float],
+    *,
+    segment_id: str = "segment-1",
+) -> tuple[TrackObservation, ...]:
+    assert len(points) == len(timestamps)
+    return tuple(
+        _ball(index, point[0], point[1], segment_id=segment_id, timestamp_seconds=timestamp)
+        for index, (point, timestamp) in enumerate(zip(points, timestamps, strict=True))
+    )
+
+
+def _ball(
+    index: int,
+    x: float,
+    y: float,
+    *,
+    segment_id: str,
+    timestamp_seconds: float | None = None,
+) -> TrackObservation:
     box = BoundingBox(x - 4, y - 4, 8, 8)
     return TrackObservation(
         f"ball-{index}",
         segment_id,
         index,
-        index * 0.2,
+        index * 0.2 if timestamp_seconds is None else timestamp_seconds,
         TrackedObjectClass.BASKETBALL,
         "ball-track",
         box,
