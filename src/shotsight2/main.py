@@ -10,11 +10,10 @@ from shotsight2.adapters.backend_probes import (
     BackendProbeConfig,
     BackendRegistry,
     create_default_registry,
+    inspect_system_profile,
 )
 from shotsight2.adapters.ffmpeg import FFmpegAdapter
 from shotsight2.adapters.filesystem import ArtifactStoreRoots, FileSystemArtifactStore
-from shotsight2.adapters.mlx_sam3 import MLXSam3ImageBackend
-from shotsight2.adapters.opencv import OpenCVTrackingBackend, OpenCVTrackingFrameSource
 from shotsight2.adapters.persistence import (
     SQLiteAnalysisRunRepository,
     SQLiteArtifactRepository,
@@ -26,19 +25,18 @@ from shotsight2.adapters.persistence import (
     SQLitePlayerTrackRepository,
     SQLiteReviewCorrectionRepository,
     SQLiteShotAttemptRepository,
-    SQLiteTrackingObservationRepository,
-    SQLiteTrackingPromptRepository,
     SQLiteVideoRepository,
 )
 from shotsight2.adapters.sqlite_queue import SQLiteWorkerQueue
 from shotsight2.api import register_routes
 from shotsight2.api.deps import (
+    get_analysis_backend_configuration_service,
     get_analysis_job_service,
     get_artifact_store,
     get_calibration_service,
     get_deletion_service,
     get_review_service,
-    get_tracking_service,
+    get_tracking_repair_service,
     get_video_ingestion_service,
     get_video_library_service,
 )
@@ -51,9 +49,7 @@ from shotsight2.api.routers.health import (
     get_system_profile,
 )
 from shotsight2.config import Settings, settings
-from shotsight2.domain.tracking import ModelConfig
-from shotsight2.domain.tracking_backends import SystemProfile, TrackingBackendName
-from shotsight2.ports.tracking import TrackingBackend
+from shotsight2.domain.tracking_backends import SystemProfile
 from shotsight2.services import (
     AnalysisJobService,
     CalibrationService,
@@ -63,9 +59,10 @@ from shotsight2.services import (
     VideoIngestionService,
     VideoLibraryService,
 )
+from shotsight2.services.backend_configuration import AnalysisBackendConfigurationService
 from shotsight2.services.readiness import ProductReadinessService
 from shotsight2.services.review import ReviewService
-from shotsight2.services.tracking import TrackingOrchestrator
+from shotsight2.services.tracking_repair import TrackingRepairService
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +78,8 @@ class LocalRuntime:
     deletion: VideoDeletionService
     calibration: CalibrationService
     review: ReviewService
-    tracking: TrackingOrchestrator
+    tracking_repair: TrackingRepairService
+    backend_configuration: AnalysisBackendConfigurationService
     worker_queue: SQLiteWorkerQueue
     readiness: ProductReadinessService
 
@@ -102,7 +100,8 @@ def create_app(
         )
     )
 
-    runtime = _create_local_runtime(application_settings)
+    profile = system_profile or inspect_system_profile()
+    runtime = _create_local_runtime(application_settings, registry, profile)
     application.state.runtime = runtime
     application.dependency_overrides[get_video_library_service] = lambda: runtime.video_library
     application.dependency_overrides[get_video_ingestion_service] = lambda: runtime.video_ingestion
@@ -110,7 +109,8 @@ def create_app(
     application.dependency_overrides[get_deletion_service] = lambda: runtime.deletion
     application.dependency_overrides[get_calibration_service] = lambda: runtime.calibration
     application.dependency_overrides[get_review_service] = lambda: runtime.review
-    application.dependency_overrides[get_tracking_service] = lambda: runtime.tracking
+    application.dependency_overrides[get_tracking_repair_service] = lambda: runtime.tracking_repair
+    application.dependency_overrides[get_analysis_backend_configuration_service] = lambda: runtime.backend_configuration
     application.dependency_overrides[get_artifact_store] = lambda: runtime.artifact_store
     application.dependency_overrides[get_media_tool] = lambda: runtime.media_tool
     application.dependency_overrides[get_artifact_store_optional] = lambda: runtime.artifact_store
@@ -123,13 +123,16 @@ def create_app(
 
     application.dependency_overrides[get_settings] = lambda: application_settings
     application.dependency_overrides[get_backend_registry] = lambda: registry
-    if system_profile is not None:
-        application.dependency_overrides[get_system_profile] = lambda: system_profile
+    application.dependency_overrides[get_system_profile] = lambda: profile
 
     return application
 
 
-def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
+def _create_local_runtime(
+    application_settings: Settings,
+    backend_registry: BackendRegistry,
+    system_profile: SystemProfile,
+) -> LocalRuntime:
     data_dir = application_settings.data_dir
     database = SQLiteDatabase(_sqlite_path(application_settings.database_url, data_dir))
     database.migrate()
@@ -145,8 +148,6 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
     segments = SQLiteCameraSegmentRepository(database)
     calibrations = SQLiteCalibrationRepository(database)
     corrections = SQLiteReviewCorrectionRepository(database)
-    prompts = SQLiteTrackingPromptRepository(database)
-    observations = SQLiteTrackingObservationRepository(database)
     queue = SQLiteWorkerQueue(database)
     readiness = ProductReadinessService(
         queue,
@@ -180,20 +181,11 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
     calibration = CalibrationService(segments, calibrations)
     statistics = StatisticsService(attempts, players)
     review = ReviewService(corrections, attempts, players, statistics)
-    tracking = TrackingOrchestrator(
-        backend=_tracking_backend(application_settings),
-        frame_source=OpenCVTrackingFrameSource(data_dir / "runtime-tracking-source.mp4"),
-        observations=observations,
-        prompts=prompts,
-        model_config=ModelConfig(
-            model_path=(
-                str(application_settings.mlx_model_path)
-                if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value
-                and application_settings.mlx_model_path is not None
-                else None
-            ),
-            device="mps" if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value else "cpu",
-        ),
+    tracking_repair = TrackingRepairService(videos, runs, segments)
+    backend_configuration = AnalysisBackendConfigurationService(
+        backend_registry,
+        system_profile,
+        application_settings.tracking_backend,
     )
 
     return LocalRuntime(
@@ -206,18 +198,11 @@ def _create_local_runtime(application_settings: Settings) -> LocalRuntime:
         deletion=deletion,
         calibration=calibration,
         review=review,
-        tracking=tracking,
+        tracking_repair=tracking_repair,
+        backend_configuration=backend_configuration,
         worker_queue=queue,
         readiness=readiness,
     )
-
-
-def _tracking_backend(application_settings: Settings) -> TrackingBackend:
-    """Construct the configured backend without loading optional model weights."""
-
-    if application_settings.tracking_backend == TrackingBackendName.MLX_SAM3.value:
-        return MLXSam3ImageBackend()
-    return OpenCVTrackingBackend()
 
 
 def _sqlite_path(database_url: str, data_dir: Path) -> Path:

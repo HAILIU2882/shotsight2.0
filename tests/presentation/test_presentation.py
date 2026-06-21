@@ -17,11 +17,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from shotsight2.api.deps import (
+    get_analysis_backend_configuration_service,
     get_analysis_job_service,
     get_calibration_service,
     get_deletion_service,
     get_review_service,
-    get_tracking_service,
+    get_tracking_repair_service,
     get_video_ingestion_service,
     get_video_library_service,
 )
@@ -40,8 +41,15 @@ from shotsight2.domain.persistence import (
 from shotsight2.domain.review import ReviewQueueItem, ReviewStatus
 from shotsight2.presentation import register_presentation
 from shotsight2.presentation.i18n import DEFAULT_LOCALE, SUPPORTED_LOCALES, get_catalog, t
-from shotsight2.services.analysis_jobs import AnalysisJobSnapshot, VideoNotReadyError
+from shotsight2.services.analysis_jobs import AnalysisConfiguration, AnalysisJobSnapshot, VideoNotReadyError
+from shotsight2.services.backend_configuration import AnalysisBackendCatalog, AnalysisBackendOption
 from shotsight2.services.calibration import PresentationCalibrationModel
+from shotsight2.services.tracking_repair import (
+    TrackingRepairContext,
+    TrackingRepairNotFoundError,
+    TrackingRepairSegment,
+    TrackingRepairUnavailableError,
+)
 from shotsight2.services.video_ingestion import (
     UploadVideoCommand,
     UploadVideoResult,
@@ -294,10 +302,31 @@ def review_svc(app: FastAPI) -> MagicMock:
     return svc
 
 
-@pytest.fixture()
+@pytest.fixture(autouse=True)
+def backend_svc(app: FastAPI) -> MagicMock:
+    svc = MagicMock()
+    svc.catalog.return_value = AnalysisBackendCatalog(
+        options=(
+            AnalysisBackendOption("mlx-sam3", "MLX SAM 3", "0.1.0", True, True, "ready"),
+            AnalysisBackendOption("opencv-cpu", "OpenCV CPU fallback", "4.13.0", True, False, "ready"),
+        ),
+        selection_error=None,
+    )
+    svc.resolve.side_effect = lambda name: AnalysisConfiguration(name, "resolved-version", {})
+    app.dependency_overrides[get_analysis_backend_configuration_service] = lambda: svc
+    return svc
+
+
+@pytest.fixture(autouse=True)
 def tracking_svc(app: FastAPI) -> MagicMock:
     svc = MagicMock()
-    app.dependency_overrides[get_tracking_service] = lambda: svc
+    svc.context.return_value = TrackingRepairContext(
+        video_id="v1",
+        run_id="run-1",
+        segments=(TrackingRepairSegment("seg-1", 0.0, 30.0, None),),
+    )
+    svc.reject_submission.side_effect = TrackingRepairUnavailableError("repair unavailable")
+    app.dependency_overrides[get_tracking_repair_service] = lambda: svc
     return svc
 
 
@@ -554,6 +583,21 @@ class TestVideoDetailPage:
             follow_redirects=False,
         )
         assert resp.status_code == 303
+        configuration = job_svc.request_analysis.call_args.args[1]
+        assert configuration.backend_name == "opencv-cpu"
+        assert configuration.backend_version == "resolved-version"
+
+    def test_configured_backend_is_selected_without_free_text(
+        self,
+        client: TestClient,
+        library_svc: MagicMock,
+    ) -> None:
+        library_svc.get_video_detail.return_value = _video_detail()
+        resp = client.get("/videos/v1")
+        assert resp.status_code == 200
+        assert '<select name="backend_name"' in resp.text
+        assert 'value="mlx-sam3" selected' in resp.text
+        assert 'name="backend_version"' not in resp.text
 
     def test_start_analysis_shows_error_on_not_ready(
         self,
@@ -811,56 +855,33 @@ class TestStatisticsPage:
 
 
 class TestTrackingRepairPage:
-    """PRE-012: Tracking-repair prompt controls."""
+    """PRE-012: Tracking repair is scoped and truthfully disabled."""
 
-    def test_renders_form(self, client: TestClient) -> None:
+    def test_renders_video_scoped_segments(self, client: TestClient) -> None:
         resp = client.get("/videos/v1/tracking-repair")
         assert resp.status_code == 200
         assert t("tracking.title", "en") in resp.text
+        assert "seg-1" in resp.text
+        assert "Tracking repair is not available yet" in resp.text
+        assert "/videos/v1/tracking/submit" not in resp.text
 
     def test_form_chinese(self, client: TestClient) -> None:
         resp = client.get("/videos/v1/tracking-repair?locale=zh")
         assert resp.status_code == 200
         assert t("tracking.title", "zh") in resp.text
 
-    def test_submit_point_prompt_redirects(self, client: TestClient, tracking_svc: MagicMock) -> None:
+    def test_stale_submit_is_rejected(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
             "/videos/v1/tracking/submit",
-            data={
-                "segment_id": "seg-1",
-                "timestamp_seconds": "3.0",
-                "kind": "point",
-                "point_x": "100",
-                "point_y": "200",
-            },
-            follow_redirects=False,
+            data={"segment_id": "seg-1"},
         )
-        assert resp.status_code == 303
-        tracking_svc.save_user_prompt.assert_called_once()
+        assert resp.status_code == 409
+        tracking_svc.reject_submission.assert_called_once_with("v1", "seg-1")
 
-    def test_submit_box_prompt_redirects(self, client: TestClient, tracking_svc: MagicMock) -> None:
-        resp = client.post(
-            "/videos/v1/tracking/submit",
-            data={
-                "segment_id": "seg-1",
-                "timestamp_seconds": "3.0",
-                "kind": "box",
-                "box_x": "10",
-                "box_y": "20",
-                "box_w": "50",
-                "box_h": "60",
-            },
-            follow_redirects=False,
-        )
-        assert resp.status_code == 303
-
-    def test_missing_geometry_returns_422(self, client: TestClient, tracking_svc: MagicMock) -> None:
-        resp = client.post(
-            "/videos/v1/tracking/submit",
-            data={"segment_id": "seg-1", "timestamp_seconds": "3.0", "kind": "point"},
-        )
-        assert resp.status_code == 422
-        tracking_svc.save_user_prompt.assert_not_called()
+    def test_cross_video_target_returns_404(self, client: TestClient, tracking_svc: MagicMock) -> None:
+        tracking_svc.reject_submission.side_effect = TrackingRepairNotFoundError("wrong video")
+        resp = client.post("/videos/v1/tracking/submit", data={"segment_id": "seg-v2"})
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
