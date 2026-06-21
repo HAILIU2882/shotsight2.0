@@ -38,7 +38,7 @@ document, not a replacement for the detailed design.
 | Statistics and shot summaries | Implemented | `src/shotsight2/services/statistics.py`, `tests/statistics` |
 | Complete video deletion | Implemented | `src/shotsight2/services/deletion.py`, `tests/deletion`, `tests/e2e/test_local_workflow.py` |
 | Bilingual English/Chinese UI | Implemented | `src/shotsight2/presentation/i18n`, `tests/presentation` |
-| End-to-end local workflow | Implemented | Production worker composition and real-adapter generated-video coverage in `src/shotsight2/worker/runtime.py`, `src/shotsight2/services/production_pipeline.py`, and `tests/e2e/test_production_pipeline.py` |
+| End-to-end local workflow | Implemented | Combined real HTTP-to-worker release gate in `tests/e2e/test_live_workflow.py`, plus focused production pipeline coverage in `tests/e2e/test_production_pipeline.py` |
 | macOS native smoke | Implemented | `doc/reports/test-report.md` macOS native app smoke entry |
 | Docker/Colima smoke | Implemented | Isolated-config image build, healthy web/worker services, HTTP liveness and product readiness, SQLite worker heartbeat, shared volume, and cleanup evidence in `doc/reports/test-report.md` |
 | Windows/Linux smoke | Deferred | Deferred by current macOS phase in `doc/prompt.md`; must not be marked complete |
@@ -48,6 +48,6 @@ document, not a replacement for the detailed design.
 - The application is not production-ready until lifecycle/outcome benchmark
   labels, visual-render baselines, and deferred cross-platform smoke tests are
   resolved.
-- Current automated tests prove local service, API, presentation, and fallback
-  workflow behavior, but do not prove 90-100% real-video tracking/counting
-  accuracy.
+- Current automated tests prove the combined local HTTP upload, production
+  analysis, review, reanalysis, and deletion workflow, but do not prove
+  90-100% real-video tracking/counting accuracy.

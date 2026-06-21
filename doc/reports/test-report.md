@@ -733,3 +733,36 @@ Full quality gates:
 - Deterministic regression coverage proves that 912 measured frames render
   successfully while a source that actually yields only 911 frames raises the
   existing incomplete-decode error.
+
+### Combined Live Workflow Release Gate
+
+- Completed on 2026-06-21 in `tests/e2e/test_live_workflow.py`.
+- The test submits generated MP4 media through the real multipart `/upload`
+  presentation route and requires an HTTP 303 redirect to an HTML video detail
+  page, preventing a regression to a raw JSON upload response.
+- The same migrated SQLite database and filesystem artifact store are shared by
+  the FastAPI runtime, real SQLite queue, `WorkerProcess`, production handler,
+  FFmpeg adapter, and OpenCV tracking backend. No production pipeline stage is
+  mocked.
+- A first no-shot analysis publishes its run and derived artifacts. The test
+  then creates a manual missed attempt through the presentation route, updates
+  it to made through the review route, and verifies the effective reviewed
+  result and append-only correction history.
+- Reanalysis is requested through the presentation route and consumed by a
+  second real worker. It publishes a second completed run while preserving the
+  first completed run, its manual attempt, correction history, and artifacts.
+- The deletion confirmation page and exact-filename form are exercised. Final
+  assertions prove that video, job, run, attempt, correction, and artifact rows
+  are removed and the video-owned filesystem inventory is empty.
+- Liveness remains HTTP 200 independently; readiness is HTTP 503 with no worker
+  and HTTP 200 after a fresh real SQLite heartbeat.
+- Focused command:
+  `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q tests/e2e/test_live_workflow.py -vv`
+  passed: 1 test.
+- Full command:
+  `COVERAGE_FILE=/private/tmp/shotsight2-live-workflow.coverage PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/pytest -q --cov=shotsight2 --cov-report=term-missing --cov-fail-under=80`
+  passed: 485 tests with 92.70% total coverage.
+- `PYTHONPATH=src /Users/hailiu/Desktop/Projects/shotsight2.0/.venv/bin/mypy --strict src tests`
+  passed with no issues in 160 source files.
+- Ruff lint passed across `src`, `tests`, and `scripts`; Ruff format check
+  reported 165 files already formatted.
