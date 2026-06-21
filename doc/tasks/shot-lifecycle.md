@@ -13,6 +13,9 @@ Ball tracks, player association, rim geometry, camera-segment boundaries.
 - [x] `SHT-001` Define lifecycle states, events, evidence, confidence, and attempt-candidate models.
 - [x] `SHT-002` Implement possessed-ball state entry and exit rules.
 - [x] `SHT-003` Detect release as ball separation from the associated shooter.
+  - The first free-ball observation must occur within the configured release
+    window after the final possessed observation; an expired window is retained
+    as deterministic ignored-release evidence.
 - [x] `SHT-004` Reject shooting motion without ball release.
 - [x] `SHT-005` Track free-flight observations after release.
 - [x] `SHT-006` Detect immediate blocks after a valid release.

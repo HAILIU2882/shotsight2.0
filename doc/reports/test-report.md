@@ -1,5 +1,21 @@
 # Test Report
 
+## 2026-06-21 - Shot Lifecycle Release Window
+
+- Fast-forwarded `codex/lifecycle-release-window` to the current local `main`
+  before final validation.
+- Enforced the configured release window between the final possessed-ball
+  observation and the first free-ball observation. The inclusive boundary
+  remains a valid release; expired gaps reset possession and retain one
+  ignored-release candidate with ordered observation evidence.
+- Added deterministic tests just inside, exactly at, and beyond the default
+  0.5-second window without changing possession or shot-motion thresholds.
+- Focused lifecycle validation passed: 15 tests with 90.79% coverage across
+  the lifecycle service and domain models.
+- The merged full suite passed with 92.59% total coverage.
+- Strict mypy passed over 163 source and test files. Ruff lint passed, and Ruff
+  format reported 168 files already formatted.
+
 ## 2026-06-21 - UI/API/Runtime Backend Consistency
 
 - Merged the current local `main`, including Docker readiness and render frame
