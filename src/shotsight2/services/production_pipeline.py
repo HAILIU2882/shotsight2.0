@@ -387,6 +387,7 @@ class RenderingStage:
                 source_width=metadata.video.display_width,
                 source_height=metadata.video.display_height,
                 source_fps=metadata.video.average_fps,
+                source_frame_count=metadata.video.frame_count,
                 attempts=ctx.attempts,
                 locations=ctx.locations,
                 players=ctx.players,

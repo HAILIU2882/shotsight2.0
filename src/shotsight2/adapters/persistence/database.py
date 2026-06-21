@@ -28,7 +28,7 @@ class SQLiteDatabase:
     ) -> None:
         """Configure a database path without opening it."""
         self.path = path
-        self.migrations_dir = migrations_dir or Path(__file__).parents[4] / "migrations"
+        self.migrations_dir = migrations_dir or Path(__file__).resolve().parents[2] / "migrations"
         self.busy_timeout_ms = busy_timeout_ms
 
     def connect(self) -> sqlite3.Connection:

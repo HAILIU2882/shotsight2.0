@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,16 @@ import pytest
 from shotsight2.adapters.persistence import SQLiteDatabase, SQLiteDiagnosticRepository, SQLiteVideoRepository
 from shotsight2.adapters.persistence.database import MigrationError
 from shotsight2.domain import Video
+
+ROOT = Path(__file__).resolve().parents[2]
+MIGRATION_NAMES = {
+    "001_initial.sql",
+    "002_diagnostics.sql",
+    "003_worker_queue.sql",
+    "004_video_source_metadata.sql",
+    "005_tracking_observations.sql",
+    "006_association_evidence.sql",
+}
 
 
 def test_empty_database_upgrades_idempotently(tmp_path: Path) -> None:
@@ -39,6 +50,27 @@ def test_empty_database_upgrades_idempotently(tmp_path: Path) -> None:
         "association_evidence_references",
     } <= tables
     assert [int(row["version"]) for row in versions] == [1, 2, 3, 4, 5, 6]
+
+
+def test_default_migrations_are_package_owned(tmp_path: Path) -> None:
+    """Default migrations must resolve inside the installable package tree."""
+    database = SQLiteDatabase(tmp_path / "package-owned.db")
+
+    assert database.migrations_dir.parent.name == "shotsight2"
+    assert {path.name for path in database.migrations_dir.glob("*.sql")} == MIGRATION_NAMES
+
+
+def test_wheel_configuration_includes_migration_resources() -> None:
+    """The configured Hatch package root must own every schema resource."""
+    with (ROOT / "pyproject.toml").open("rb") as project_file:
+        configuration = tomllib.load(project_file)
+
+    wheel = configuration["tool"]["hatch"]["build"]["targets"]["wheel"]
+    package_root = ROOT / wheel["packages"][0]
+    migration_root = package_root / "migrations"
+
+    assert package_root == ROOT / "src" / "shotsight2"
+    assert {path.name for path in migration_root.glob("*.sql")} == MIGRATION_NAMES
 
 
 def test_missing_migrations_are_rejected(tmp_path: Path) -> None:

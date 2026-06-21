@@ -73,6 +73,7 @@ class RenderRunRequest:
     source_width: int
     source_height: int
     source_fps: float
+    source_frame_count: int | None
     attempts: tuple[ShotAttempt, ...]
     locations: tuple[ShotLocation, ...]
     players: tuple[PlayerTrack, ...]
@@ -142,6 +143,7 @@ class OverlaySequenceRequest:
     duration_seconds: float
     frames_per_second: float
     source_frames_per_second: float
+    source_frame_count: int | None
     observations: tuple[TrackObservation, ...]
     attempts: tuple[ShotAttempt, ...]
     players_by_id: Mapping[str, PlayerTrack]
@@ -167,7 +169,7 @@ class OpenCVOverlayFrameSequenceRenderer:
         if request.source_frames_per_second <= 0:
             capture.release()
             raise ArtifactRenderingError("Source frame rate must be positive")
-        frame_count = max(1, math.ceil(request.duration_seconds * request.frames_per_second - 1e-9))
+        frame_count = _overlay_frame_count(request)
         observation_index = _ObservationTimelineIndex.build(request.observations)
         decoded_source_index = -1
         frame: Any | None = None
@@ -202,6 +204,21 @@ class OpenCVOverlayFrameSequenceRenderer:
         finally:
             capture.release()
         return request.output_directory / request.frame_pattern
+
+
+def _overlay_frame_count(request: OverlaySequenceRequest) -> int:
+    """Return the sampled output count, preferring measured source frames."""
+
+    if request.source_frame_count is None:
+        return max(1, math.ceil(request.duration_seconds * request.frames_per_second - 1e-9))
+    if request.source_frame_count <= 0:
+        raise ArtifactRenderingError("Measured source frame count must be positive")
+    sampled_count = math.ceil(
+        request.source_frame_count * request.frames_per_second / request.source_frames_per_second - 1e-9
+    )
+    # Overlay rendering samples source frames; it never invents extra frames when
+    # output and measured source rates differ only because of container timing.
+    return max(1, min(request.source_frame_count, sampled_count))
 
 
 class ArtifactRenderingService:
@@ -360,6 +377,7 @@ class ArtifactRenderingService:
                         duration_seconds=request.source_duration_seconds,
                         frames_per_second=request.config.overlay_frames_per_second,
                         source_frames_per_second=request.source_fps,
+                        source_frame_count=request.source_frame_count,
                         observations=observations,
                         attempts=request.attempts,
                         players_by_id=players_by_id,
