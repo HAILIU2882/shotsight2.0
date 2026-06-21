@@ -27,7 +27,7 @@ from shotsight2.api.deps import (
     get_calibration_service,
     get_deletion_service,
     get_review_service,
-    get_tracking_service,
+    get_tracking_repair_service,
     get_video_ingestion_service,
     get_video_library_service,
 )
@@ -51,6 +51,10 @@ from shotsight2.services.analysis_jobs import (
     VideoNotReadyError,
 )
 from shotsight2.services.deletion import ActiveVideoAnalysisError
+from shotsight2.services.tracking_repair import (
+    TrackingRepairNotFoundError,
+    TrackingRepairUnavailableError,
+)
 from shotsight2.services.video_ingestion import (
     UploadVideoCommand,
     UploadVideoResult,
@@ -298,7 +302,8 @@ def review_svc(app: FastAPI) -> MagicMock:
 @pytest.fixture()
 def tracking_svc(app: FastAPI) -> MagicMock:
     svc = MagicMock()
-    app.dependency_overrides[get_tracking_service] = lambda: svc
+    svc.reject_submission.side_effect = TrackingRepairUnavailableError("repair unavailable")
+    app.dependency_overrides[get_tracking_repair_service] = lambda: svc
     return svc
 
 
@@ -325,7 +330,7 @@ class TestErrorHandlers:
     def test_video_not_ready_returns_409(self, app: FastAPI, job_svc: MagicMock) -> None:
         job_svc.request_analysis.side_effect = VideoNotReadyError("not ready")
         resp = TestClient(app, raise_server_exceptions=False).post(
-            "/videos/v1/analysis",
+            "/api/videos/v1/analysis",
             json={"backend_name": "cpu", "backend_version": "1.0"},
         )
         assert resp.status_code == 409
@@ -334,7 +339,7 @@ class TestErrorHandlers:
     def test_active_job_error_returns_409(self, app: FastAPI, job_svc: MagicMock) -> None:
         job_svc.request_analysis.side_effect = ActiveAnalysisJobError("already running")
         resp = TestClient(app, raise_server_exceptions=False).post(
-            "/videos/v1/analysis",
+            "/api/videos/v1/analysis",
             json={"backend_name": "cpu", "backend_version": "1.0"},
         )
         assert resp.status_code == 409
@@ -342,12 +347,12 @@ class TestErrorHandlers:
 
     def test_job_not_found_returns_404(self, app: FastAPI, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = None
-        resp = TestClient(app, raise_server_exceptions=False).get("/jobs/missing-job")
+        resp = TestClient(app, raise_server_exceptions=False).get("/api/jobs/missing-job")
         assert resp.status_code == 404
 
     def test_active_video_analysis_during_deletion_returns_409(self, app: FastAPI, deletion_svc: MagicMock) -> None:
         deletion_svc.delete_video.side_effect = ActiveVideoAnalysisError("v1", ("job-1",))
-        resp = TestClient(app, raise_server_exceptions=False).delete("/videos/v1")
+        resp = TestClient(app, raise_server_exceptions=False).delete("/api/videos/v1")
         assert resp.status_code == 409
         assert resp.json()["code"] == "ACTIVE_JOB_CONFLICT"
 
@@ -362,7 +367,7 @@ class TestListVideos:
 
     def test_returns_200_with_library(self, client: TestClient, library_svc: MagicMock) -> None:
         library_svc.list_videos.return_value = _library()
-        resp = client.get("/videos")
+        resp = client.get("/api/videos")
         assert resp.status_code == 200
         data = resp.json()
         assert data["state"] == "POPULATED"
@@ -373,7 +378,7 @@ class TestListVideos:
         library_svc.list_videos.return_value = VideoLibrary(
             state=LibraryState.EMPTY, videos=(), storage=LibraryStorageSummary(0, 0, 0, 0)
         )
-        resp = client.get("/videos")
+        resp = client.get("/api/videos")
         assert resp.status_code == 200
         assert resp.json()["state"] == "EMPTY"
 
@@ -388,17 +393,17 @@ class TestGetVideo:
 
     def test_returns_200_with_detail(self, client: TestClient, library_svc: MagicMock) -> None:
         library_svc.get_video_detail.return_value = _video_detail()
-        resp = client.get("/videos/v1")
+        resp = client.get("/api/videos/v1")
         assert resp.status_code == 200
         assert resp.json()["card"]["video_id"] == "v1"
 
     def test_returns_404_when_not_found(self, client: TestClient, library_svc: MagicMock) -> None:
         library_svc.get_video_detail.return_value = None
-        resp = client.get("/videos/missing")
+        resp = client.get("/api/videos/missing")
         assert resp.status_code == 404
 
     def test_blank_video_id_returns_422(self, client: TestClient, library_svc: MagicMock) -> None:
-        resp = client.get("/videos/   ")
+        resp = client.get("/api/videos/   ")
         assert resp.status_code == 422
 
 
@@ -418,7 +423,7 @@ class TestUploadVideo:
         )
         ingestion_svc.ingest.return_value = result
         resp = client.post(
-            "/videos",
+            "/api/videos",
             files={"file": ("game.mp4", b"fake-video-bytes", "video/mp4")},
         )
         assert resp.status_code == 201
@@ -435,7 +440,7 @@ class TestUploadVideo:
             VideoIngestionErrorCode.SIZE_LIMIT_EXCEEDED, "File exceeds limit"
         )
         resp = client.post(
-            "/videos",
+            "/api/videos",
             files={"file": ("game.mp4", b"fake-video-bytes", "video/mp4")},
         )
         assert resp.status_code == 422
@@ -451,12 +456,12 @@ class TestDeleteVideo:
     """API-005: DELETE /videos/{video_id} removes video."""
 
     def test_returns_204_on_success(self, client: TestClient, deletion_svc: MagicMock) -> None:
-        resp = client.delete("/videos/v1")
+        resp = client.delete("/api/videos/v1")
         assert resp.status_code == 204
         deletion_svc.delete_video.assert_called_once_with("v1")
 
     def test_blank_id_returns_422(self, client: TestClient, deletion_svc: MagicMock) -> None:
-        resp = client.delete("/videos/   ")
+        resp = client.delete("/api/videos/   ")
         assert resp.status_code == 422
         deletion_svc.delete_video.assert_not_called()
 
@@ -472,7 +477,7 @@ class TestStartAnalysis:
     def test_returns_202_on_success(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.request_analysis.return_value = _snapshot()
         resp = client.post(
-            "/videos/v1/analysis",
+            "/api/videos/v1/analysis",
             json={"backend_name": "opencv-cpu", "backend_version": "0.1.0"},
         )
         assert resp.status_code == 202
@@ -481,7 +486,7 @@ class TestStartAnalysis:
 
     def test_blank_backend_name_returns_422(self, client: TestClient, job_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/analysis",
+            "/api/videos/v1/analysis",
             json={"backend_name": "", "backend_version": "0.1.0"},
         )
         assert resp.status_code == 422
@@ -489,7 +494,7 @@ class TestStartAnalysis:
 
     def test_blank_backend_version_returns_422(self, client: TestClient, job_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/analysis",
+            "/api/videos/v1/analysis",
             json={"backend_name": "opencv-cpu", "backend_version": "   "},
         )
         assert resp.status_code == 422
@@ -506,20 +511,20 @@ class TestGetAnalysisStatus:
 
     def test_returns_active_job_when_video_matches(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = _snapshot(video_id="v1")
-        resp = client.get("/videos/v1/analysis")
+        resp = client.get("/api/videos/v1/analysis")
         assert resp.status_code == 200
         assert resp.json()["job"]["video_id"] == "v1"
 
     def test_returns_idle_when_no_active_job(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = None
-        resp = client.get("/videos/v1/analysis")
+        resp = client.get("/api/videos/v1/analysis")
         assert resp.status_code == 200
         assert resp.json()["state"] == "IDLE"
         assert resp.json()["video_id"] == "v1"
 
     def test_returns_idle_when_active_job_for_different_video(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = _snapshot(video_id="other")
-        resp = client.get("/videos/v1/analysis")
+        resp = client.get("/api/videos/v1/analysis")
         assert resp.status_code == 200
         assert resp.json()["state"] == "IDLE"
 
@@ -534,18 +539,18 @@ class TestGetJob:
 
     def test_returns_job_when_active_and_id_matches(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = _snapshot("job-1")
-        resp = client.get("/jobs/job-1")
+        resp = client.get("/api/jobs/job-1")
         assert resp.status_code == 200
         assert resp.json()["job"]["id"] == "job-1"
 
     def test_returns_404_when_no_active_job(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = None
-        resp = client.get("/jobs/job-1")
+        resp = client.get("/api/jobs/job-1")
         assert resp.status_code == 404
 
     def test_returns_404_when_active_job_id_does_not_match(self, client: TestClient, job_svc: MagicMock) -> None:
         job_svc.current_job.return_value = _snapshot("other-job")
-        resp = client.get("/jobs/job-1")
+        resp = client.get("/api/jobs/job-1")
         assert resp.status_code == 404
 
 
@@ -583,7 +588,7 @@ class TestListSegments:
             indicative_only=False,
         )
         calibration_svc.presentation_models_for_run.return_value = (model,)
-        resp = client.get("/videos/v1/segments?run_id=run-1")
+        resp = client.get("/api/videos/v1/segments?run_id=run-1")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
@@ -591,7 +596,7 @@ class TestListSegments:
 
     def test_returns_empty_list(self, client: TestClient, calibration_svc: MagicMock) -> None:
         calibration_svc.presentation_models_for_run.return_value = ()
-        resp = client.get("/videos/v1/segments?run_id=run-1")
+        resp = client.get("/api/videos/v1/segments?run_id=run-1")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -607,7 +612,7 @@ class TestCorrectCalibration:
     def test_returns_updated_calibration(self, client: TestClient, calibration_svc: MagicMock) -> None:
         calibration_svc.correct_segment.return_value = _calibration()
         resp = client.patch(
-            "/videos/v1/segments/seg-1/calibration",
+            "/api/videos/v1/segments/seg-1/calibration",
             json={"segment_id": "seg-1"},
         )
         assert resp.status_code == 200
@@ -615,7 +620,7 @@ class TestCorrectCalibration:
 
     def test_segment_id_mismatch_returns_422(self, client: TestClient, calibration_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/segments/seg-1/calibration",
+            "/api/videos/v1/segments/seg-1/calibration",
             json={"segment_id": "seg-2"},
         )
         assert resp.status_code == 422
@@ -623,7 +628,7 @@ class TestCorrectCalibration:
 
     def test_invalid_court_reference_point_returns_422(self, client: TestClient, calibration_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/segments/seg-1/calibration",
+            "/api/videos/v1/segments/seg-1/calibration",
             json={
                 "segment_id": "seg-1",
                 "court_points": {"UNKNOWN_POINT": {"x": 10, "y": 20}},
@@ -658,19 +663,19 @@ class TestPlayers:
         card_with_stats = replace(detail.card, statistics=replace(_shooting_summary(), players=(player,)))
         detail_with_player = replace(detail, card=card_with_stats, players=(player,))
         library_svc.get_video_detail.return_value = detail_with_player
-        resp = client.get("/videos/v1/players")
+        resp = client.get("/api/videos/v1/players")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
         assert resp.json()[0]["player_track_id"] == "pt-1"
 
     def test_list_players_404_when_video_absent(self, client: TestClient, library_svc: MagicMock) -> None:
         library_svc.get_video_detail.return_value = None
-        resp = client.get("/videos/missing/players")
+        resp = client.get("/api/videos/missing/players")
         assert resp.status_code == 404
 
     def test_rename_player_returns_updated(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/players/pt-1",
+            "/api/videos/v1/players/pt-1",
             json={"display_name": "Alice"},
         )
         assert resp.status_code == 200
@@ -681,7 +686,7 @@ class TestPlayers:
 
     def test_rename_player_blank_name_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/players/pt-1",
+            "/api/videos/v1/players/pt-1",
             json={"display_name": ""},
         )
         assert resp.status_code == 422
@@ -698,7 +703,7 @@ class TestAttempts:
 
     def test_list_returns_queue(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.build_review_queue.return_value = (_review_item(),)
-        resp = client.get("/videos/v1/attempts")
+        resp = client.get("/api/videos/v1/attempts")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
@@ -707,7 +712,7 @@ class TestAttempts:
     def test_create_attempt_returns_201(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.create_manual_attempt.return_value = _shooting_summary()
         resp = client.post(
-            "/videos/v1/attempts",
+            "/api/videos/v1/attempts",
             json={
                 "run_id": "run-1",
                 "release_seconds": 5.0,
@@ -720,7 +725,7 @@ class TestAttempts:
 
     def test_create_attempt_invalid_outcome_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/attempts",
+            "/api/videos/v1/attempts",
             json={
                 "run_id": "run-1",
                 "release_seconds": 5.0,
@@ -733,7 +738,7 @@ class TestAttempts:
 
     def test_create_attempt_blank_shot_type_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/attempts",
+            "/api/videos/v1/attempts",
             json={
                 "run_id": "run-1",
                 "release_seconds": 5.0,
@@ -747,7 +752,7 @@ class TestAttempts:
     def test_update_attempt_outcome(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.override_outcome.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "outcome", "value": "MISSED"},
         )
         assert resp.status_code == 200
@@ -755,7 +760,7 @@ class TestAttempts:
 
     def test_update_attempt_invalid_outcome_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "outcome", "value": "BASKET"},
         )
         assert resp.status_code == 422
@@ -763,7 +768,7 @@ class TestAttempts:
     def test_update_attempt_shooter(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.override_shooter.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "shooter_track_id", "value": "pt-1"},
         )
         assert resp.status_code == 200
@@ -772,7 +777,7 @@ class TestAttempts:
     def test_update_attempt_shot_type(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.override_shot_type.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "shot_type", "value": "THREE_POINT"},
         )
         assert resp.status_code == 200
@@ -780,7 +785,7 @@ class TestAttempts:
 
     def test_update_attempt_blank_shot_type_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "shot_type", "value": ""},
         )
         assert resp.status_code == 422
@@ -788,7 +793,7 @@ class TestAttempts:
     def test_update_attempt_location(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.override_location.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={
                 "field": "location",
                 "value": {
@@ -803,7 +808,7 @@ class TestAttempts:
     def test_update_attempt_remove(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.remove_attempt.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "removed", "value": True},
         )
         assert resp.status_code == 200
@@ -812,7 +817,7 @@ class TestAttempts:
     def test_update_attempt_restore(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.restore_attempt.return_value = _shooting_summary()
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "removed", "value": False},
         )
         assert resp.status_code == 200
@@ -820,14 +825,14 @@ class TestAttempts:
 
     def test_update_attempt_unknown_field_returns_422(self, client: TestClient, review_svc: MagicMock) -> None:
         resp = client.patch(
-            "/videos/v1/attempts/att-1",
+            "/api/videos/v1/attempts/att-1",
             json={"field": "not_a_real_field", "value": "x"},
         )
         assert resp.status_code == 422
 
     def test_delete_attempt_returns_204(self, client: TestClient, review_svc: MagicMock) -> None:
         review_svc.remove_attempt.return_value = _shooting_summary()
-        resp = client.delete("/videos/v1/attempts/att-1")
+        resp = client.delete("/api/videos/v1/attempts/att-1")
         assert resp.status_code == 204
         review_svc.remove_attempt.assert_called_once()
 
@@ -838,11 +843,11 @@ class TestAttempts:
 
 
 class TestTrackingPrompts:
-    """API-013: POST /videos/{video_id}/tracking/prompts."""
+    """API-013: repair endpoints reject ineffective completed-run mutations."""
 
     def test_submits_point_prompt(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -851,13 +856,12 @@ class TestTrackingPrompts:
                 "point": {"x": 100.0, "y": 200.0},
             },
         )
-        assert resp.status_code == 201
-        assert resp.json()["accepted"] is True
-        tracking_svc.save_user_prompt.assert_called_once()
+        assert resp.status_code == 409
+        tracking_svc.reject_submission.assert_called_once_with("v1", "seg-1")
 
     def test_submits_box_prompt(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -866,11 +870,11 @@ class TestTrackingPrompts:
                 "box": {"x": 10, "y": 20, "width": 50, "height": 60},
             },
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 409
 
     def test_unknown_kind_returns_422(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -879,11 +883,11 @@ class TestTrackingPrompts:
             },
         )
         assert resp.status_code == 422
-        tracking_svc.save_user_prompt.assert_not_called()
+        tracking_svc.reject_submission.assert_not_called()
 
     def test_unknown_object_class_returns_422(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -896,7 +900,7 @@ class TestTrackingPrompts:
 
     def test_point_prompt_without_point_geometry_returns_422(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -908,7 +912,7 @@ class TestTrackingPrompts:
 
     def test_box_prompt_without_box_geometry_returns_422(self, client: TestClient, tracking_svc: MagicMock) -> None:
         resp = client.post(
-            "/videos/v1/tracking/prompts",
+            "/api/videos/v1/tracking/prompts",
             json={
                 "segment_id": "seg-1",
                 "timestamp_seconds": 3.0,
@@ -917,6 +921,20 @@ class TestTrackingPrompts:
             },
         )
         assert resp.status_code == 422
+
+    def test_cross_video_segment_returns_404(self, client: TestClient, tracking_svc: MagicMock) -> None:
+        tracking_svc.reject_submission.side_effect = TrackingRepairNotFoundError("wrong video")
+        resp = client.post(
+            "/api/videos/v1/tracking/prompts",
+            json={
+                "segment_id": "segment-from-v2",
+                "timestamp_seconds": 3.0,
+                "object_class": "basketball",
+                "kind": "point",
+                "point": {"x": 10, "y": 10},
+            },
+        )
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -962,34 +980,34 @@ class TestArtifactStreaming:
         return TestClient(app, raise_server_exceptions=False)
 
     def test_full_stream_returns_200(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/v1/game.mp4")
+        resp = stream_client.get("/api/artifacts/video/v1/game.mp4")
         assert resp.status_code == 200
         assert resp.content == b"A" * 100
         assert resp.headers["content-length"] == "100"
         assert resp.headers["accept-ranges"] == "bytes"
 
     def test_ranged_request_returns_206(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/v1/game.mp4", headers={"Range": "bytes=0-9"})
+        resp = stream_client.get("/api/artifacts/video/v1/game.mp4", headers={"Range": "bytes=0-9"})
         assert resp.status_code == 206
         assert resp.content == b"A" * 10
         assert resp.headers["content-range"] == "bytes 0-9/100"
 
     def test_open_ended_range_request(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/v1/game.mp4", headers={"Range": "bytes=90-"})
+        resp = stream_client.get("/api/artifacts/video/v1/game.mp4", headers={"Range": "bytes=90-"})
         assert resp.status_code == 206
         assert resp.content == b"A" * 10
         assert resp.headers["content-range"] == "bytes 90-99/100"
 
     def test_unsatisfiable_range_returns_416(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/v1/game.mp4", headers={"Range": "bytes=200-300"})
+        resp = stream_client.get("/api/artifacts/video/v1/game.mp4", headers={"Range": "bytes=200-300"})
         assert resp.status_code == 416
 
     def test_missing_artifact_returns_404(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/missing/game.mp4")
+        resp = stream_client.get("/api/artifacts/video/missing/game.mp4")
         assert resp.status_code == 404
 
     def test_invalid_artifact_id_returns_422(self, stream_client: TestClient) -> None:
-        resp = stream_client.get("/artifacts/video/invalid/game.mp4")
+        resp = stream_client.get("/api/artifacts/video/invalid/game.mp4")
         assert resp.status_code == 422
 
 
@@ -1014,27 +1032,27 @@ class TestPreferences:
         from shotsight2.api.routers import preferences
 
         preferences._current_locale = "en"
-        resp = client.get("/preferences/language")
+        resp = client.get("/api/preferences/language")
         assert resp.status_code == 200
         assert resp.json()["locale"] == "en"
 
     def test_update_to_chinese(self, client: TestClient) -> None:
-        resp = client.put("/preferences/language", json={"locale": "zh"})
+        resp = client.put("/api/preferences/language", json={"locale": "zh"})
         assert resp.status_code == 200
         assert resp.json()["locale"] == "zh"
 
     def test_update_to_english(self, client: TestClient) -> None:
-        resp = client.put("/preferences/language", json={"locale": "en"})
+        resp = client.put("/api/preferences/language", json={"locale": "en"})
         assert resp.status_code == 200
         assert resp.json()["locale"] == "en"
 
     def test_invalid_locale_returns_422(self, client: TestClient) -> None:
-        resp = client.put("/preferences/language", json={"locale": "fr"})
+        resp = client.put("/api/preferences/language", json={"locale": "fr"})
         assert resp.status_code == 422
 
     def test_get_reflects_update(self, client: TestClient) -> None:
-        client.put("/preferences/language", json={"locale": "zh"})
-        resp = client.get("/preferences/language")
+        client.put("/api/preferences/language", json={"locale": "zh"})
+        resp = client.get("/api/preferences/language")
         assert resp.json()["locale"] == "zh"
 
 
@@ -1052,19 +1070,19 @@ class TestAppStructure:
         openapi = app.openapi()
         paths = set(openapi["paths"].keys())
         expected = {
-            "/videos",
-            "/videos/{video_id}",
-            "/videos/{video_id}/analysis",
-            "/jobs/{job_id}",
-            "/videos/{video_id}/segments",
-            "/videos/{video_id}/segments/{segment_id}/calibration",
-            "/videos/{video_id}/players",
-            "/videos/{video_id}/players/{player_track_id}",
-            "/videos/{video_id}/attempts",
-            "/videos/{video_id}/attempts/{attempt_id}",
-            "/videos/{video_id}/tracking/prompts",
-            "/artifacts/{artifact_id}",
-            "/preferences/language",
+            "/api/videos",
+            "/api/videos/{video_id}",
+            "/api/videos/{video_id}/analysis",
+            "/api/jobs/{job_id}",
+            "/api/videos/{video_id}/segments",
+            "/api/videos/{video_id}/segments/{segment_id}/calibration",
+            "/api/videos/{video_id}/players",
+            "/api/videos/{video_id}/players/{player_track_id}",
+            "/api/videos/{video_id}/attempts",
+            "/api/videos/{video_id}/attempts/{attempt_id}",
+            "/api/videos/{video_id}/tracking/prompts",
+            "/api/artifacts/{artifact_id}",
+            "/api/preferences/language",
         }
         for path in expected:
             assert path in paths, f"Missing route: {path}"

@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
-from shotsight2.api.deps import get_tracking_service
+from shotsight2.api.deps import get_tracking_repair_service
 from shotsight2.domain.tracking import (
-    BoundingBox,
-    ImagePoint,
     PromptKind,
-    PromptSource,
     TrackedObjectClass,
-    TrackingPrompt,
 )
-from shotsight2.services.tracking import TrackingOrchestrator
+from shotsight2.services.tracking_repair import (
+    TrackingRepairNotFoundError,
+    TrackingRepairService,
+    TrackingRepairUnavailableError,
+)
 
 router = APIRouter(prefix="/videos/{video_id}", tags=["tracking"])
 
@@ -62,37 +61,27 @@ class TrackingPromptRequest(BaseModel):
         return v
 
 
-@router.post("/tracking/prompts", status_code=201)
+@router.post("/tracking/prompts", status_code=409)
 def submit_tracking_prompt(
     video_id: str,
     body: TrackingPromptRequest,
-    tracking: Annotated[TrackingOrchestrator, Depends(get_tracking_service)],
+    repair: Annotated[TrackingRepairService, Depends(get_tracking_repair_service)],
 ) -> dict[str, Any]:
-    """Submit a user tracking-repair point or box prompt for full reanalysis.
+    """Reject repair prompts until completed-run application is supported.
 
     Raises 422 for unknown object classes, unsupported prompt kinds, or missing geometry.
     """
     kind = PromptKind(body.kind)
-    point: ImagePoint | None = None
-    box: BoundingBox | None = None
     if kind is PromptKind.POINT:
         if body.point is None:
             raise HTTPException(status_code=422, detail="Point geometry required for POINT prompt")
-        point = ImagePoint(x=body.point["x"], y=body.point["y"])
     elif kind is PromptKind.BOX:
         if body.box is None:
             raise HTTPException(status_code=422, detail="Box geometry required for BOX prompt")
-        box = BoundingBox(x=body.box.x, y=body.box.y, width=body.box.width, height=body.box.height)
-
-    prompt = TrackingPrompt(
-        id=str(uuid4()),
-        segment_id=body.segment_id,
-        timestamp_seconds=body.timestamp_seconds,
-        object_class=TrackedObjectClass(body.object_class),
-        kind=kind,
-        source=PromptSource.USER,
-        point=point,
-        box=box,
-    )
-    tracking.save_user_prompt(prompt)
-    return {"segment_id": body.segment_id, "accepted": True}
+    try:
+        repair.reject_submission(video_id, body.segment_id)
+    except TrackingRepairNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TrackingRepairUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise AssertionError("Tracking repair unexpectedly accepted a submission")

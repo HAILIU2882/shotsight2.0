@@ -43,15 +43,17 @@
     <form method="post" action="/videos/{{ detail.card.video_id }}/reanalyze?locale={{ locale }}">
       <div class="form-group">
         <label>{{ t('analysis.backend_name', locale) }}
-          <input type="text" name="backend_name" value="opencv-cpu" required>
+          <select name="backend_name" required>
+            {% for backend in backend_catalog.options %}
+            <option value="{{ backend.name }}" {% if backend.selected %}selected{% endif %} {% if not backend.available %}disabled{% endif %}>
+              {{ backend.display_name }} ({{ backend.version }}){% if not backend.available %} — {{ t('analysis.unavailable', locale) }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
         </label>
       </div>
-      <div class="form-group">
-        <label>{{ t('analysis.backend_version', locale) }}
-          <input type="text" name="backend_version" value="0.1.0" required>
-        </label>
-      </div>
-      <button class="btn btn-secondary" type="submit">{{ t('detail.reanalyze', locale) }}</button>
+      {% if backend_catalog.selection_error %}<p class="hint">{{ backend_catalog.selection_error }}</p>{% endif %}
+      <button class="btn btn-secondary" type="submit" {% if not backend_catalog.has_available_backend %}disabled{% endif %}>{{ t('detail.reanalyze', locale) }}</button>
     </form>
     {% elif st == 'FAILED' %}
     <div class="alert alert-error">{{ t('progress.failed', locale, reason=detail.card.analysis.failure.message if detail.card.analysis.failure else '') }}</div>
@@ -59,15 +61,17 @@
     <form method="post" action="/videos/{{ detail.card.video_id }}/analyze?locale={{ locale }}">
       <div class="form-group">
         <label>{{ t('analysis.backend_name', locale) }}
-          <input type="text" name="backend_name" value="opencv-cpu" required>
+          <select name="backend_name" required>
+            {% for backend in backend_catalog.options %}
+            <option value="{{ backend.name }}" {% if backend.selected %}selected{% endif %} {% if not backend.available %}disabled{% endif %}>
+              {{ backend.display_name }} ({{ backend.version }}){% if not backend.available %} — {{ t('analysis.unavailable', locale) }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
         </label>
       </div>
-      <div class="form-group">
-        <label>{{ t('analysis.backend_version', locale) }}
-          <input type="text" name="backend_version" value="0.1.0" required>
-        </label>
-      </div>
-      <button class="btn btn-primary" type="submit">{{ t('detail.analyze', locale) }}</button>
+      {% if backend_catalog.selection_error %}<p class="hint">{{ backend_catalog.selection_error }}</p>{% endif %}
+      <button class="btn btn-primary" type="submit" {% if not backend_catalog.has_available_backend %}disabled{% endif %}>{{ t('detail.analyze', locale) }}</button>
     </form>
     {% endif %}
   </div>
@@ -110,7 +114,7 @@
   <h2>{{ t('detail.artifacts', locale) }}</h2>
   <ul style="list-style:none;font-size:0.85rem">
   {% for art in detail.artifacts %}
-    <li style="margin-bottom:0.4rem"><a href="/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.artifact_id }}</a> ({{ art.kind }})</li>
+    <li style="margin-bottom:0.4rem"><a href="/api/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.artifact_id }}</a> ({{ art.kind }})</li>
   {% endfor %}
   </ul>
 </div>

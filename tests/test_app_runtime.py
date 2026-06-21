@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from shotsight2.adapters.persistence import SQLiteVideoRepository
@@ -76,3 +77,31 @@ def test_combined_app_prefers_html_video_detail_page(tmp_path: Path) -> None:
     assert response.headers["content-type"].startswith("text/html")
     assert "Video Detail" in response.text
     assert "routing.mov" in response.text
+
+    api_response = TestClient(application).get("/api/videos/video-routing")
+    assert api_response.status_code == 200
+    assert api_response.headers["content-type"].startswith("application/json")
+    assert api_response.json()["card"]["video_id"] == "video-routing"
+
+
+def test_combined_app_has_no_html_json_method_path_collisions(tmp_path: Path) -> None:
+    """UI and JSON resource routes must have distinct canonical paths."""
+    application = create_app(
+        Settings(
+            data_dir=tmp_path / "data",
+            database_url=f"sqlite:///{tmp_path / 'database' / 'shotsight2.db'}",
+            tracking_backend=None,
+        )
+    )
+    registrations = [
+        (route.path, method)
+        for route in application.routes
+        if isinstance(route, APIRoute)
+        for method in getattr(route, "methods", set())
+        if method in {"GET", "POST", "PATCH", "DELETE", "PUT"}
+    ]
+
+    assert registrations.count(("/videos/{video_id}", "GET")) == 1
+    assert registrations.count(("/api/videos/{video_id}", "GET")) == 1
+    assert registrations.count(("/videos/{video_id}/attempts", "GET")) == 1
+    assert registrations.count(("/api/videos/{video_id}/attempts", "GET")) == 1

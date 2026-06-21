@@ -1,5 +1,27 @@
 # Test Report
 
+## 2026-06-21 - UI/API/Runtime Backend Consistency
+
+- Merged the current local `main`, including Docker readiness and render frame
+  boundary fixes, before validation.
+- Moved canonical JSON resource routes under `/api`; server-rendered routes
+  remain under `/` and `/videos/...`. Legacy `/health`, `/ready`, and
+  `/artifacts/...` aliases remain available because they do not collide with
+  presentation routes.
+- Analysis forms now render probed backend choices and derive backend versions
+  server-side. A configured `mlx-sam3` backend is selected when ready, while
+  forged or unavailable backend values are rejected.
+- Removed the process-global `runtime-tracking-source.mp4` composition. Repair
+  context is resolved by video, run, and stable segment. Mutation returns HTTP
+  409 until prompt application can be made atomic; cross-video segment targets
+  return HTTP 404.
+- Focused command:
+  `PYTHONPATH=src .venv/bin/pytest -q tests/presentation tests/application_api tests/test_app_runtime.py`
+  passed 136 tests before the final merge.
+- Full gate: 490 tests passed with 92.49% total coverage on Python 3.12.12.
+- `mypy --strict src tests`, `ruff check src tests`, and
+  `ruff format --check src tests` all passed.
+
 ## Baseline
 
 - Date: 2026-06-07

@@ -234,15 +234,15 @@ flowchart TB
 
 #### Principal Route Groups
 
-- `/videos`
-- `/videos/{video_id}`
-- `/videos/{video_id}/analysis`
-- `/videos/{video_id}/calibrations`
-- `/videos/{video_id}/players`
-- `/videos/{video_id}/attempts`
-- `/videos/{video_id}/artifacts`
-- `/jobs/{job_id}`
-- `/settings/language`
+- `/api/videos`
+- `/api/videos/{video_id}`
+- `/api/videos/{video_id}/analysis`
+- `/api/videos/{video_id}/calibrations`
+- `/api/videos/{video_id}/players`
+- `/api/videos/{video_id}/attempts`
+- `/api/artifacts/{artifact_id}`
+- `/api/jobs/{job_id}`
+- `/api/preferences/language`
 - `/health`
 - `/ready`
 
@@ -923,23 +923,23 @@ never see a partially published result set.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/videos` | Video library |
-| `POST` | `/videos` | Upload and validate video |
-| `GET` | `/videos/{id}` | Video and latest analysis summary |
-| `DELETE` | `/videos/{id}` | Delete video and owned data |
-| `POST` | `/videos/{id}/analysis` | Queue full analysis |
-| `GET` | `/jobs/{id}` | Analysis progress |
-| `GET` | `/videos/{id}/segments` | Camera segments and calibration state |
-| `PUT` | `/videos/{id}/segments/{segment_id}/calibration` | Correct calibration |
-| `GET` | `/videos/{id}/players` | Player tracks |
-| `PATCH` | `/videos/{id}/players/{player_id}` | Rename player |
-| `GET` | `/videos/{id}/attempts` | Effective attempts |
-| `POST` | `/videos/{id}/attempts` | Add manual attempt |
-| `PATCH` | `/videos/{id}/attempts/{attempt_id}` | Correct attempt |
-| `DELETE` | `/videos/{id}/attempts/{attempt_id}` | Remove attempt |
-| `POST` | `/videos/{id}/tracking-prompts` | Add ball repair prompt |
-| `GET` | `/videos/{id}/artifacts/{artifact_id}` | Stream local artifact |
-| `PUT` | `/settings/language` | Change English/Chinese preference |
+| `GET` | `/api/videos` | Video library |
+| `POST` | `/api/videos` | Upload and validate video |
+| `GET` | `/api/videos/{id}` | Video and latest analysis summary |
+| `DELETE` | `/api/videos/{id}` | Delete video and owned data |
+| `POST` | `/api/videos/{id}/analysis` | Queue full analysis |
+| `GET` | `/api/jobs/{id}` | Analysis progress |
+| `GET` | `/api/videos/{id}/segments` | Camera segments and calibration state |
+| `PATCH` | `/api/videos/{id}/segments/{segment_id}/calibration` | Correct calibration |
+| `GET` | `/api/videos/{id}/players` | Player tracks |
+| `PATCH` | `/api/videos/{id}/players/{player_id}` | Rename player |
+| `GET` | `/api/videos/{id}/attempts` | Effective attempts |
+| `POST` | `/api/videos/{id}/attempts` | Add manual attempt |
+| `PATCH` | `/api/videos/{id}/attempts/{attempt_id}` | Correct attempt |
+| `DELETE` | `/api/videos/{id}/attempts/{attempt_id}` | Remove attempt |
+| `POST` | `/api/videos/{id}/tracking/prompts` | Reserved; returns 409 until repair application is atomic |
+| `GET` | `/api/artifacts/{artifact_id}` | Stream local artifact |
+| `PUT` | `/api/preferences/language` | Change English/Chinese preference |
 | `GET` | `/health` | Web-process liveness and local capability diagnostics |
 | `GET` | `/ready` | Analysis readiness from database, queue, and worker heartbeat state |
 

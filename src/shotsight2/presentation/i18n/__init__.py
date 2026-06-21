@@ -59,6 +59,7 @@ _EN: Final[dict[str, str]] = {
     # ── backend form ──────────────────────────────────────────────────────
     "analysis.backend_name": "Backend",
     "analysis.backend_version": "Version",
+    "analysis.unavailable": "unavailable",
     "analysis.start": "Start",
     # ── calibration ───────────────────────────────────────────────────────
     "calibration.title": "Calibration",
@@ -107,6 +108,15 @@ _EN: Final[dict[str, str]] = {
     # ── tracking repair ───────────────────────────────────────────────────
     "tracking.title": "Tracking Repair",
     "tracking.instructions": "Click a point or draw a box to correct tracking.",
+    "tracking.unavailable_title": "Tracking repair is not available yet",
+    "tracking.unavailable_reason": (
+        "ShotSight can show the stable segments for this video, but it cannot yet apply a prompt "
+        "atomically to a completed run or safely transfer it to a new analysis. No ineffective repair will be saved."
+    ),
+    "tracking.run": "Analysis run",
+    "tracking.segment": "Stable segment",
+    "tracking.segment_frame": "Representative frame for stable segment",
+    "tracking.no_segments": "No stable segments are available for this run.",
     "tracking.submit": "Submit Prompt",
     "tracking.kind_point": "Point",
     "tracking.kind_box": "Box",
@@ -180,6 +190,7 @@ _ZH: Final[dict[str, str]] = {
     # ── backend form ──────────────────────────────────────────────────────
     "analysis.backend_name": "后端",
     "analysis.backend_version": "版本",
+    "analysis.unavailable": "不可用",
     "analysis.start": "开始",
     # ── calibration ───────────────────────────────────────────────────────
     "calibration.title": "校准",
@@ -228,6 +239,15 @@ _ZH: Final[dict[str, str]] = {
     # ── tracking repair ───────────────────────────────────────────────────
     "tracking.title": "轨迹修复",
     "tracking.instructions": "点击一个点或框选区域以修正轨迹。",
+    "tracking.unavailable_title": "轨迹修复暂不可用",
+    "tracking.unavailable_reason": (
+        "ShotSight 可以显示此视频的稳定片段，但目前无法将提示以原子方式应用到已完成的分析，"
+        "也无法安全地传递到新的分析。系统不会保存无效的修复。"
+    ),
+    "tracking.run": "分析记录",
+    "tracking.segment": "稳定片段",
+    "tracking.segment_frame": "稳定片段代表帧",
+    "tracking.no_segments": "此分析没有可用的稳定片段。",
     "tracking.submit": "提交提示",
     "tracking.kind_point": "点",
     "tracking.kind_box": "框",

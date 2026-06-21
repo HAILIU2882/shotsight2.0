@@ -46,3 +46,16 @@
   supervision while giving the UI and operations an actionable analysis gate.
 - **Reversal:** The routes can be versioned later if deployment orchestration
   adopts a different probe contract.
+
+## 2026-06-21 - Separate HTML and JSON Route Namespaces
+
+- **Decision:** Server-rendered pages remain on `/` and `/videos/...`; all JSON
+  resource routes are canonical under `/api`. Keep legacy aliases only for the
+  non-conflicting `/health`, `/ready`, and `/artifacts/...` endpoints.
+- **Reason:** FastAPI resolves duplicate method/path registrations by order.
+  Registering both presentation and JSON video routes at `/videos/...` made
+  behavior composition-order dependent.
+- **Tracking repair:** Remove the process-global placeholder media source.
+  Resolve stable segments by video and run, but disable mutation until prompts
+  can be applied atomically to a completed run or transferred to a new
+  segmentation.

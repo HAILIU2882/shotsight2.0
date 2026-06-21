@@ -43,7 +43,7 @@
   <h2>{{ t('detail.artifacts', locale) }}</h2>
   <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
   {% for art in artifacts %}
-    <a class="btn btn-secondary" href="/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.kind }}</a>
+    <a class="btn btn-secondary" href="/api/artifacts/{{ art.artifact_id }}" target="_blank">{{ art.kind }}</a>
   {% endfor %}
   </div>
 </div>

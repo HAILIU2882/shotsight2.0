@@ -77,6 +77,19 @@ a heartbeat newer than `SHOTSIGHT_WORKER_READINESS_STALE_SECONDS` (30 seconds
 by default). Missing, stale, stopped, or unknown worker state returns HTTP 503
 with structured database, queue, and worker details.
 
+The server-rendered application owns `/` and `/videos/...`. JSON resource
+endpoints use the stable `/api` namespace, for example `/api/videos` and
+`/api/videos/{video_id}/attempts`. Non-conflicting legacy aliases remain for
+`/health`, `/ready`, and `/artifacts/...` so local monitors and existing media
+links keep working.
+
+Analysis forms list only probed tracking backends and record the detected
+backend version server-side. `SHOTSIGHT_TRACKING_BACKEND=mlx-sam3` therefore
+selects MLX in the UI when it is available; clients cannot forge a backend
+version. Manual tracking repair is currently shown as unavailable because a
+prompt cannot yet be applied atomically to a completed run or safely transferred
+across a new camera segmentation.
+
 Both native launchers supervise two processes: the FastAPI web server and the
 independent analysis worker. Stop them together with `Ctrl-C`. For debugging,
 the equivalent manual two-terminal commands are:

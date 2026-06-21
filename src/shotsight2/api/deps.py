@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from shotsight2.ports.artifacts import ArtifactStore
 from shotsight2.services.analysis_jobs import AnalysisJobService
+from shotsight2.services.backend_configuration import AnalysisBackendConfigurationService
 from shotsight2.services.calibration import CalibrationService
 from shotsight2.services.deletion import VideoDeletionService
 from shotsight2.services.review import ReviewService
-from shotsight2.services.tracking import TrackingOrchestrator
+from shotsight2.services.tracking_repair import TrackingRepairService
 from shotsight2.services.video_ingestion import VideoIngestionService
 from shotsight2.services.video_library import VideoLibraryService
 
@@ -42,8 +43,14 @@ def get_review_service() -> ReviewService:
     raise NotImplementedError("Inject via app.dependency_overrides or create_app()")
 
 
-def get_tracking_service() -> TrackingOrchestrator:
-    """Return the configured tracking service."""
+def get_tracking_repair_service() -> TrackingRepairService:
+    """Return the video-scoped tracking repair service."""
+    raise NotImplementedError("Inject via app.dependency_overrides or create_app()")
+
+
+def get_analysis_backend_configuration_service() -> AnalysisBackendConfigurationService:
+    """Return the backend catalog and submission validation service."""
+
     raise NotImplementedError("Inject via app.dependency_overrides or create_app()")
 
 
