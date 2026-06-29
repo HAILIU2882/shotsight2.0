@@ -80,6 +80,30 @@ Reviewer rerun confirmed the same quality metrics: 17 basketball observations,
 one basketball track ID, zero identity switches, and full release/post-release
 frame coverage.
 
+## Reviewer All-Shot Labeled-Window Run On Main
+
+Date: 2026-06-29
+
+Result written to
+`/Users/hailiu/Desktop/shotsight2-benchmarks/bball_pt2/all-shots-temporal.json`.
+
+- Evaluated shots: 15
+- Evaluated frames: 266
+- Observed frames: 263
+- Basketball observations: 263
+- Basketball track IDs: 15 total, one per window/session
+- Identity switches: 0
+- Ball track coverage: 0.9887218045112782
+- Release-window hits: 15/15
+- Release-window frame coverage: 1.0
+- Post-release hits: 15/15
+- Post-release frame coverage: 1.0
+- Elapsed seconds: 260.10608608298935
+
+This remains an adapter-level basketball tracking benchmark over labeled
+windows. It verifies basketball observation coverage and identity continuity,
+not full shot lifecycle attempt detection.
+
 The run used the default bounded temporal options:
 
 ```json
