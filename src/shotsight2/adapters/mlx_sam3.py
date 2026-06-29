@@ -24,6 +24,8 @@ from shotsight2.domain.tracking import (
     PromptKind,
     TrackedObjectClass,
     TrackingBatchResult,
+    TrackingEvent,
+    TrackingEventKind,
     TrackingMetrics,
     TrackingPrompt,
     TrackingSession,
@@ -66,11 +68,32 @@ class _SegmentState:
     segment: CameraSegmentInput
     prompts: list[TrackingPrompt]
     tracks: dict[TrackedObjectClass, dict[str, BoundingBox]] = field(default_factory=dict)
+    basketball_tracks: dict[str, _TemporalBasketballTrack] = field(default_factory=dict)
+    basketball_track_ids_seen: set[str] = field(default_factory=set)
+    active_basketball_track_id: str | None = None
     next_track_number: dict[TrackedObjectClass, int] = field(default_factory=dict)
     activated_prompt_ids: set[str] = field(default_factory=set)
     observations: int = 0
     observed_ball_frames: set[int] = field(default_factory=set)
     reinitializations: int = 0
+    identity_switches: int = 0
+
+
+@dataclass(slots=True)
+class _TemporalBasketballTrack:
+    box: BoundingBox
+    frame_index: int
+    timestamp_seconds: float
+    previous_box: BoundingBox | None = None
+    previous_timestamp_seconds: float | None = None
+    missed_frames: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _TemporalCandidate:
+    predicted_box: BoundingBox
+    prompt_box: BoundingBox
+    reference_area: float
 
 
 class MLXSam3ImageBackend(LazyTrackingBackend):
@@ -128,6 +151,12 @@ class MLXSam3ImageRuntime:
         self._model_name: str | None = None
         self._point_box_fraction = 0.025
         self._association_distance_fraction = 0.12
+        self._seed_confidence_threshold = 0.5
+        self._continuation_confidence_threshold = 0.325
+        self._continuation_max_area_ratio = 4.0
+        self._temporal_max_gap_frames = 5
+        self._temporal_max_gap_seconds = 0.6
+        self._temporal_box_expansion_fraction = 0.35
         self._sessions: dict[str, _SegmentState] = {}
 
     def capabilities(self) -> BackendCapabilities:
@@ -144,10 +173,49 @@ class MLXSam3ImageRuntime:
             "association_distance_fraction",
             0.12,
         )
+        configured_confidence = _float_option(model_config, "confidence_threshold", 0.5)
+        self._seed_confidence_threshold = _float_option(
+            model_config,
+            "seed_confidence_threshold",
+            configured_confidence,
+        )
+        self._continuation_confidence_threshold = _float_option(
+            model_config,
+            "continuation_confidence_threshold",
+            0.325,
+        )
+        self._continuation_max_area_ratio = _float_option(
+            model_config,
+            "continuation_max_area_ratio",
+            4.0,
+        )
+        self._temporal_max_gap_frames = _nonnegative_int_option(
+            model_config,
+            "temporal_max_gap_frames",
+            5,
+        )
+        self._temporal_max_gap_seconds = _float_option(
+            model_config,
+            "temporal_max_gap_seconds",
+            0.6,
+        )
+        self._temporal_box_expansion_fraction = _float_option(
+            model_config,
+            "temporal_box_expansion_fraction",
+            0.35,
+        )
         if not 0 < self._point_box_fraction <= 1:
             raise ValueError("point_box_fraction must be between zero and one")
         if not 0 < self._association_distance_fraction <= 1:
             raise ValueError("association_distance_fraction must be between zero and one")
+        if not 0 <= self._continuation_confidence_threshold <= self._seed_confidence_threshold <= 1:
+            raise ValueError("continuation confidence must be no greater than seed confidence within zero and one")
+        if self._continuation_max_area_ratio < 1:
+            raise ValueError("continuation_max_area_ratio must be at least one")
+        if self._temporal_max_gap_seconds < 0:
+            raise ValueError("temporal_max_gap_seconds cannot be negative")
+        if not 0 <= self._temporal_box_expansion_fraction <= 2:
+            raise ValueError("temporal_box_expansion_fraction must be between zero and two")
         model = self._model_factory(model_config)
         self._processor = self._processor_factory(model, model_config)
         self._model = model
@@ -172,6 +240,7 @@ class MLXSam3ImageRuntime:
         processor = self._loaded_processor()
         state = self._state(session)
         observations: list[TrackObservation] = []
+        events: list[TrackingEvent] = []
         for frame in frames.frames:
             image_state = processor.set_image(self._image_factory(frame.pixels))
             for object_class in TrackedObjectClass:
@@ -183,10 +252,29 @@ class MLXSam3ImageRuntime:
                 if not active_prompts:
                     continue
                 processor.reset_all_prompts(image_state)
-                result_state = self._apply_prompts(processor, image_state, active_prompts, state.segment)
-                detections = _detections(result_state, state.segment)
+                temporal = (
+                    self._temporal_candidates(state, frame.timestamp_seconds)
+                    if object_class is TrackedObjectClass.BASKETBALL
+                    else {}
+                )
+                result_state = self._apply_prompts(
+                    processor,
+                    image_state,
+                    active_prompts,
+                    state.segment,
+                    tuple(candidate.prompt_box for candidate in temporal.values()),
+                )
+                detections = self._eligible_detections(
+                    object_class,
+                    _detections(result_state, state.segment),
+                    temporal,
+                    state.segment,
+                )
                 if not detections:
-                    state.tracks[object_class] = {}
+                    if object_class is TrackedObjectClass.BASKETBALL:
+                        self._age_unmatched_basketball_tracks(state, (), frame.timestamp_seconds)
+                    else:
+                        state.tracks[object_class] = {}
                     continue
                 prompt = _provenance_prompt(active_prompts)
                 reinitialized = (
@@ -194,13 +282,21 @@ class MLXSam3ImageRuntime:
                     and prompt.kind in {PromptKind.POINT, PromptKind.BOX}
                     and prompt.id not in state.activated_prompt_ids
                 )
-                track_ids = self._associate(
+                track_ids, fragmented = self._associate(
                     state,
                     object_class,
                     tuple(box for box, _score in detections),
                     prompt.target_track_id if prompt is not None else None,
+                    frame.frame_index,
+                    frame.timestamp_seconds,
+                    temporal,
                 )
-                for (box, confidence), local_track_id in zip(detections, track_ids, strict=True):
+                for (box, confidence), local_track_id, identity_fragmented in zip(
+                    detections,
+                    track_ids,
+                    fragmented,
+                    strict=True,
+                ):
                     observation = TrackObservation(
                         id=f"{session.id}:{frame.frame_index}:{object_class.value}:{local_track_id}",
                         segment_id=state.segment.id,
@@ -223,6 +319,18 @@ class MLXSam3ImageRuntime:
                         ),
                     )
                     observations.append(observation)
+                    if identity_fragmented:
+                        events.append(
+                            TrackingEvent(
+                                kind=TrackingEventKind.IDENTITY_SWITCH,
+                                timestamp_seconds=frame.timestamp_seconds,
+                                object_class=TrackedObjectClass.BASKETBALL,
+                                local_track_id=local_track_id,
+                                reason="SAM 3 basketball continuity expired and a new local identity was created.",
+                                observation_id=observation.id,
+                            )
+                        )
+                        state.identity_switches += 1
                     state.observations += 1
                     if object_class is TrackedObjectClass.BASKETBALL:
                         state.observed_ball_frames.add(frame.frame_index)
@@ -231,7 +339,7 @@ class MLXSam3ImageRuntime:
                 state.activated_prompt_ids.update(
                     active.id for active in active_prompts if active.kind in {PromptKind.POINT, PromptKind.BOX}
                 )
-        return TrackingBatchResult(tuple(observations))
+        return TrackingBatchResult(tuple(observations), tuple(events))
 
     def add_prompt(self, session: TrackingSession, prompt: TrackingPrompt) -> None:
         """Add a repair prompt that becomes active at its timestamp."""
@@ -255,7 +363,7 @@ class MLXSam3ImageRuntime:
                 expected_frames=expected,
                 observed_frames=len(state.observed_ball_frames),
                 reinitializations=state.reinitializations,
-                identity_switches=0,
+                identity_switches=state.identity_switches,
                 lost_events=0,
                 occlusion_events=0,
             ),
@@ -275,6 +383,7 @@ class MLXSam3ImageRuntime:
         image_state: dict[str, object],
         prompts: Sequence[TrackingPrompt],
         segment: CameraSegmentInput,
+        temporal_boxes: Sequence[BoundingBox] = (),
     ) -> dict[str, object]:
         result = image_state
         concepts = tuple(prompt for prompt in prompts if prompt.kind is PromptKind.CONCEPT)
@@ -290,7 +399,76 @@ class MLXSam3ImageRuntime:
                 True,
                 result,
             )
+        for box in temporal_boxes:
+            result = processor.add_geometric_prompt(
+                _normalized_box(box, segment),
+                True,
+                result,
+            )
         return result
+
+    def _eligible_detections(
+        self,
+        object_class: TrackedObjectClass,
+        detections: Sequence[tuple[BoundingBox, float]],
+        temporal: dict[str, _TemporalCandidate],
+        segment: CameraSegmentInput,
+    ) -> tuple[tuple[BoundingBox, float], ...]:
+        if object_class is TrackedObjectClass.BASKETBALL:
+            return self._selected_basketball_detection(detections, temporal, segment)
+        eligible: list[tuple[BoundingBox, float]] = []
+        for detection in detections:
+            _box, confidence = detection
+            if confidence >= self._seed_confidence_threshold:
+                eligible.append(detection)
+        return tuple(eligible)
+
+    def _selected_basketball_detection(
+        self,
+        detections: Sequence[tuple[BoundingBox, float]],
+        temporal: dict[str, _TemporalCandidate],
+        segment: CameraSegmentInput,
+    ) -> tuple[tuple[BoundingBox, float], ...]:
+        continuations: list[tuple[tuple[float, float, float, float, float], tuple[BoundingBox, float]]] = []
+        for detection in detections:
+            box, confidence = detection
+            if confidence < self._continuation_confidence_threshold:
+                continue
+            for candidate in temporal.values():
+                if _is_consistent_continuation(
+                    box,
+                    candidate,
+                    segment,
+                    self._association_distance_fraction,
+                    self._continuation_max_area_ratio,
+                ):
+                    continuations.append((_continuation_rank(box, confidence, candidate), detection))
+                    break
+        if continuations:
+            return (max(continuations, key=lambda item: item[0])[1],)
+        seeds = tuple(detection for detection in detections if detection[1] >= self._seed_confidence_threshold)
+        return (max(seeds, key=_seed_rank),) if seeds else ()
+
+    def _temporal_candidates(
+        self,
+        state: _SegmentState,
+        timestamp_seconds: float,
+    ) -> dict[str, _TemporalCandidate]:
+        self._expire_basketball_tracks(state, timestamp_seconds)
+        if state.active_basketball_track_id is None:
+            return {}
+        track = state.basketball_tracks.get(state.active_basketball_track_id)
+        if track is None:
+            state.active_basketball_track_id = None
+            return {}
+        return {
+            state.active_basketball_track_id: _temporal_candidate(
+                track,
+                timestamp_seconds,
+                state.segment,
+                self._temporal_box_expansion_fraction,
+            )
+        }
 
     def _associate(
         self,
@@ -298,10 +476,23 @@ class MLXSam3ImageRuntime:
         object_class: TrackedObjectClass,
         boxes: Sequence[BoundingBox],
         preferred_track_id: str | None,
-    ) -> tuple[str, ...]:
+        frame_index: int,
+        timestamp_seconds: float,
+        temporal: dict[str, _TemporalCandidate],
+    ) -> tuple[tuple[str, ...], tuple[bool, ...]]:
+        if object_class is TrackedObjectClass.BASKETBALL:
+            return self._associate_basketballs(
+                state,
+                boxes,
+                preferred_track_id,
+                frame_index,
+                timestamp_seconds,
+                temporal,
+            )
         previous = state.tracks.get(object_class, {})
         available = set(previous)
         assigned: list[str] = []
+        fragmented: list[bool] = []
         current: dict[str, BoundingBox] = {}
         diagonal = math.hypot(state.segment.width, state.segment.height)
 
@@ -324,9 +515,85 @@ class MLXSam3ImageRuntime:
                     track_id = matched_track_id
                 available.discard(track_id)
             assigned.append(track_id)
+            fragmented.append(False)
             current[track_id] = box
         state.tracks[object_class] = current
-        return tuple(assigned)
+        return tuple(assigned), tuple(fragmented)
+
+    def _associate_basketballs(
+        self,
+        state: _SegmentState,
+        boxes: Sequence[BoundingBox],
+        preferred_track_id: str | None,
+        frame_index: int,
+        timestamp_seconds: float,
+        temporal: dict[str, _TemporalCandidate],
+    ) -> tuple[tuple[str, ...], tuple[bool, ...]]:
+        boxes = boxes[:1]
+        assigned: list[str] = []
+        fragmented: list[bool] = []
+
+        for index, box in enumerate(boxes):
+            automatic_new_identity = False
+            if index == 0 and preferred_track_id:
+                track_id = preferred_track_id
+            else:
+                matched_track_id = _best_temporal_track(
+                    box,
+                    temporal,
+                    state.segment,
+                    self._association_distance_fraction,
+                    self._continuation_max_area_ratio,
+                )
+                if matched_track_id is None:
+                    number = state.next_track_number.get(TrackedObjectClass.BASKETBALL, 1)
+                    track_id = f"{TrackedObjectClass.BASKETBALL.value}-{number}"
+                    state.next_track_number[TrackedObjectClass.BASKETBALL] = number + 1
+                    automatic_new_identity = True
+                else:
+                    track_id = matched_track_id
+            old_track = state.basketball_tracks.get(track_id)
+            state.basketball_tracks = {
+                track_id: _TemporalBasketballTrack(
+                    box=box,
+                    frame_index=frame_index,
+                    timestamp_seconds=timestamp_seconds,
+                    previous_box=old_track.box if old_track is not None else None,
+                    previous_timestamp_seconds=old_track.timestamp_seconds if old_track is not None else None,
+                )
+            }
+            state.active_basketball_track_id = track_id
+            is_fragmented = automatic_new_identity and bool(state.basketball_track_ids_seen)
+            state.basketball_track_ids_seen.add(track_id)
+            assigned.append(track_id)
+            fragmented.append(is_fragmented)
+
+        self._age_unmatched_basketball_tracks(state, assigned, timestamp_seconds)
+        return tuple(assigned), tuple(fragmented)
+
+    def _age_unmatched_basketball_tracks(
+        self,
+        state: _SegmentState,
+        matched_track_ids: Sequence[str],
+        timestamp_seconds: float,
+    ) -> None:
+        matched = set(matched_track_ids)
+        for track_id, track in state.basketball_tracks.items():
+            if track_id not in matched:
+                track.missed_frames += 1
+        self._expire_basketball_tracks(state, timestamp_seconds)
+
+    def _expire_basketball_tracks(self, state: _SegmentState, timestamp_seconds: float) -> None:
+        expired = tuple(
+            track_id
+            for track_id, track in state.basketball_tracks.items()
+            if track.missed_frames > self._temporal_max_gap_frames
+            or timestamp_seconds - track.timestamp_seconds > self._temporal_max_gap_seconds
+        )
+        for track_id in expired:
+            del state.basketball_tracks[track_id]
+        if state.active_basketball_track_id in expired:
+            state.active_basketball_track_id = None
 
     def _loaded_processor(self) -> Sam3ImageProcessor:
         if self._processor is None:
@@ -387,7 +654,14 @@ def _default_processor_factory(model: object, config: ModelConfig) -> Sam3ImageP
     if not callable(processor_type):
         raise OptionalTrackingBackendUnavailable("Installed MLX SAM 3 package does not expose Sam3Processor.")
     resolution = _int_option(config, "resolution", 1008)
-    confidence = _float_option(config, "confidence_threshold", 0.5)
+    seed_confidence = _float_option(
+        config,
+        "seed_confidence_threshold",
+        _float_option(config, "confidence_threshold", 0.5),
+    )
+    confidence = _float_option(config, "continuation_confidence_threshold", 0.325)
+    if not 0 <= confidence <= seed_confidence <= 1:
+        raise ValueError("continuation confidence must be no greater than seed confidence within zero and one")
     processor = cast(Callable[..., object], processor_type)(
         model,
         resolution=resolution,
@@ -446,6 +720,134 @@ def _normalized_prompt_box(
         _clamp(width, 2 / segment.width, 1.0),
         _clamp(height, 2 / segment.height, 1.0),
     ]
+
+
+def _normalized_box(box: BoundingBox, segment: CameraSegmentInput) -> list[float]:
+    center = box.centroid
+    return [
+        _clamp(center.x / segment.width, 0.0, 1.0),
+        _clamp(center.y / segment.height, 0.0, 1.0),
+        _clamp(box.width / segment.width, 2 / segment.width, 1.0),
+        _clamp(box.height / segment.height, 2 / segment.height, 1.0),
+    ]
+
+
+def _temporal_candidate(
+    track: _TemporalBasketballTrack,
+    timestamp_seconds: float,
+    segment: CameraSegmentInput,
+    expansion_fraction: float,
+) -> _TemporalCandidate:
+    elapsed = max(0.0, timestamp_seconds - track.timestamp_seconds)
+    center = track.box.centroid
+    predicted_x = center.x
+    predicted_y = center.y
+    if track.previous_box is not None and track.previous_timestamp_seconds is not None:
+        history_seconds = track.timestamp_seconds - track.previous_timestamp_seconds
+        if history_seconds > 0:
+            previous_center = track.previous_box.centroid
+            predicted_x += (center.x - previous_center.x) * elapsed / history_seconds
+            predicted_y += (center.y - previous_center.y) * elapsed / history_seconds
+    predicted = _centered_clamped_box(
+        predicted_x,
+        predicted_y,
+        track.box.width,
+        track.box.height,
+        segment,
+    )
+    prompt = _centered_clamped_box(
+        predicted.centroid.x,
+        predicted.centroid.y,
+        predicted.width * (1 + 2 * expansion_fraction),
+        predicted.height * (1 + 2 * expansion_fraction),
+        segment,
+    )
+    return _TemporalCandidate(predicted, prompt, track.box.area)
+
+
+def _centered_clamped_box(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    segment: CameraSegmentInput,
+) -> BoundingBox:
+    actual_width = min(float(segment.width), max(2.0, width))
+    actual_height = min(float(segment.height), max(2.0, height))
+    half_width = actual_width / 2
+    half_height = actual_height / 2
+    clamped_center_x = _clamp(center_x, half_width, float(segment.width) - half_width)
+    clamped_center_y = _clamp(center_y, half_height, float(segment.height) - half_height)
+    return BoundingBox(
+        clamped_center_x - half_width,
+        clamped_center_y - half_height,
+        actual_width,
+        actual_height,
+    )
+
+
+def _is_consistent_continuation(
+    box: BoundingBox,
+    candidate: _TemporalCandidate,
+    segment: CameraSegmentInput,
+    association_distance_fraction: float,
+    maximum_area_ratio: float,
+) -> bool:
+    area_ratio = max(box.area / candidate.reference_area, candidate.reference_area / box.area)
+    if area_ratio > maximum_area_ratio:
+        return False
+    predicted = candidate.predicted_box
+    overlap = box.intersection_area(predicted)
+    distance = math.hypot(
+        box.centroid.x - predicted.centroid.x,
+        box.centroid.y - predicted.centroid.y,
+    )
+    return overlap > 0 or distance <= math.hypot(segment.width, segment.height) * association_distance_fraction
+
+
+def _best_temporal_track(
+    box: BoundingBox,
+    temporal: dict[str, _TemporalCandidate],
+    segment: CameraSegmentInput,
+    association_distance_fraction: float,
+    maximum_area_ratio: float,
+) -> str | None:
+    best_track_id: str | None = None
+    best_rank: tuple[float, float, float, float, float] | None = None
+    for track_id, candidate in sorted(temporal.items()):
+        if not _is_consistent_continuation(
+            box,
+            candidate,
+            segment,
+            association_distance_fraction,
+            maximum_area_ratio,
+        ):
+            continue
+        rank = _continuation_rank(box, 1.0, candidate)
+        if best_rank is None or rank > best_rank:
+            best_track_id = track_id
+            best_rank = rank
+    return best_track_id
+
+
+def _continuation_rank(
+    box: BoundingBox,
+    confidence: float,
+    candidate: _TemporalCandidate,
+) -> tuple[float, float, float, float, float]:
+    predicted = candidate.predicted_box
+    union = box.area + predicted.area - box.intersection_area(predicted)
+    overlap = box.intersection_area(predicted) / union if union > 0 else 0.0
+    distance = math.hypot(
+        box.centroid.x - predicted.centroid.x,
+        box.centroid.y - predicted.centroid.y,
+    )
+    return (overlap, -distance, confidence, -box.x, -box.y)
+
+
+def _seed_rank(detection: tuple[BoundingBox, float]) -> tuple[float, float, float, float, float]:
+    box, confidence = detection
+    return (confidence, -box.x, -box.y, -box.width, -box.height)
 
 
 def _detections(
@@ -551,6 +953,13 @@ def _int_option(config: ModelConfig, name: str, default: int) -> int:
     value = config.options.get(name, default)
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _nonnegative_int_option(config: ModelConfig, name: str, default: int) -> int:
+    value = config.options.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
     return value
 
 
