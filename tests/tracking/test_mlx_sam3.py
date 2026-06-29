@@ -22,6 +22,7 @@ from shotsight2.domain.tracking import (
     PromptKind,
     PromptSource,
     TrackedObjectClass,
+    TrackingEventKind,
     TrackingFrame,
     TrackingPrompt,
 )
@@ -73,7 +74,54 @@ class _FakeProcessor:
         return state
 
 
+class _SequencedProcessor:
+    def __init__(self, detections: dict[str, list[tuple[list[list[float]], list[float]]]]) -> None:
+        self._detections = detections
+        self.images: list[object] = []
+        self.text_prompts: list[str] = []
+        self.geometry: list[tuple[int, list[float]]] = []
+
+    def set_image(self, image: object, state: dict[str, object] | None = None) -> dict[str, object]:
+        del state
+        self.images.append(image)
+        return {"image": image, "frame_number": len(self.images) - 1}
+
+    def reset_all_prompts(self, state: dict[str, object]) -> None:
+        state.pop("boxes", None)
+        state.pop("scores", None)
+
+    def set_text_prompt(self, prompt: str, state: dict[str, object]) -> dict[str, object]:
+        self.text_prompts.append(prompt)
+        frame_number = state["frame_number"]
+        assert isinstance(frame_number, int)
+        boxes, scores = self._detections[prompt][frame_number]
+        state["boxes"] = boxes
+        state["scores"] = scores
+        return state
+
+    def add_geometric_prompt(
+        self,
+        box: list[float],
+        label: bool,
+        state: dict[str, object],
+    ) -> dict[str, object]:
+        assert label is True
+        frame_number = state["frame_number"]
+        assert isinstance(frame_number, int)
+        self.geometry.append((frame_number, box))
+        return state
+
+
 def _runtime(processor: _FakeProcessor) -> MLXSam3ImageRuntime:
+    return MLXSam3ImageRuntime(
+        model_factory=lambda _config: object(),
+        processor_factory=lambda _model, _config: processor,
+        image_factory=lambda pixels: pixels,
+        backend_version="0.1.0-test",
+    )
+
+
+def _sequenced_runtime(processor: _SequencedProcessor) -> MLXSam3ImageRuntime:
     return MLXSam3ImageRuntime(
         model_factory=lambda _config: object(),
         processor_factory=lambda _model, _config: processor,
@@ -183,7 +231,7 @@ def test_point_and_box_prompts_use_upstream_geometric_box_api() -> None:
     second = runtime.process_batch(session, FrameBatch((_frame(2, 0.2),)))
 
     assert processor.geometry[0] == pytest.approx([0.5, 0.5, 0.05, 0.05])
-    assert processor.geometry[3] == pytest.approx([0.6, 0.25, 0.2, 0.1])
+    assert processor.geometry[4] == pytest.approx([0.6, 0.25, 0.2, 0.1])
     assert first.observations[0].local_track_id == "chosen-ball"
     assert first.observations[0].provenance.reinitialized is True
     assert {item.local_track_id for item in second.observations} == {
@@ -195,6 +243,198 @@ def test_point_and_box_prompts_use_upstream_geometric_box_api() -> None:
         "chosen-player",
         "chosen-rim",
     }
+
+
+def test_temporal_box_prompt_accepts_consistent_low_confidence_continuation_across_miss() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                ([[10.0, 20.0, 30.0, 40.0]], [0.8]),
+                ([], []),
+                ([[12.0, 20.0, 32.0, 40.0]], [0.32]),
+            ]
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    runtime.load(
+        ModelConfig(
+            options={
+                "continuation_confidence_threshold": 0.3,
+                "temporal_max_gap_frames": 2,
+                "temporal_max_gap_seconds": 1.0,
+            }
+        )
+    )
+    session = runtime.start_segment(segment, (_concepts(segment)[0],))
+
+    result = runtime.process_batch(
+        session,
+        FrameBatch((_frame(0, 0), _frame(1, 0.1), _frame(2, 0.2))),
+    )
+
+    assert [(item.frame_index, item.local_track_id) for item in result.observations] == [
+        (0, "basketball-1"),
+        (2, "basketball-1"),
+    ]
+    assert result.observations[-1].confidence == pytest.approx(0.32)
+    assert result.observations[-1].provenance.prompt_id == "concept-basketball"
+    assert [frame_number for frame_number, _box in processor.geometry] == [1, 2]
+    assert result.events == ()
+
+
+def test_basketball_selection_is_single_slot_and_prefers_continuation_over_seed() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                (
+                    [[80.0, 20.0, 100.0, 40.0], [10.0, 20.0, 30.0, 40.0]],
+                    [0.95, 0.7],
+                ),
+                (
+                    [[10.0, 20.0, 30.0, 40.0], [82.0, 20.0, 102.0, 40.0]],
+                    [0.99, 0.34],
+                ),
+                (
+                    [[120.0, 20.0, 140.0, 40.0], [84.0, 20.0, 104.0, 40.0]],
+                    [0.98, 0.36],
+                ),
+            ]
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    runtime.load(ModelConfig(options={"continuation_confidence_threshold": 0.3}))
+    session = runtime.start_segment(segment, (_concepts(segment)[0],))
+
+    result = runtime.process_batch(
+        session,
+        FrameBatch((_frame(0, 0), _frame(1, 0.1), _frame(2, 0.2))),
+    )
+
+    assert [(item.frame_index, item.local_track_id) for item in result.observations] == [
+        (0, "basketball-1"),
+        (1, "basketball-1"),
+        (2, "basketball-1"),
+    ]
+    assert [item.bounding_box.x for item in result.observations] == [80.0, 82.0, 84.0]
+    assert [item.confidence for item in result.observations] == pytest.approx([0.95, 0.34, 0.36])
+    assert [frame_number for frame_number, _box in processor.geometry] == [1, 2]
+    assert len({item.frame_index for item in result.observations}) == len(result.observations)
+
+
+def test_basketball_seed_selects_highest_confidence_detection_only() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                (
+                    [
+                        [20.0, 20.0, 40.0, 40.0],
+                        [80.0, 20.0, 100.0, 40.0],
+                        [50.0, 20.0, 70.0, 40.0],
+                    ],
+                    [0.68, 0.93, 0.82],
+                )
+            ]
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    runtime.load(ModelConfig(options={"seed_confidence_threshold": 0.5}))
+    session = runtime.start_segment(segment, (_concepts(segment)[0],))
+
+    result = runtime.process_batch(session, FrameBatch((_frame(0, 0),)))
+
+    assert len(result.observations) == 1
+    assert result.observations[0].bounding_box == BoundingBox(80, 20, 20, 20)
+    assert result.observations[0].confidence == pytest.approx(0.93)
+    assert result.observations[0].local_track_id == "basketball-1"
+    assert processor.geometry == []
+
+
+def test_temporal_prompt_predicts_velocity_and_clamps_expanded_box() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                ([[140.0, 40.0, 160.0, 60.0]], [0.8]),
+                ([[160.0, 40.0, 180.0, 60.0]], [0.8]),
+                ([], []),
+            ]
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    runtime.load(ModelConfig(options={"temporal_box_expansion_fraction": 0.5}))
+    session = runtime.start_segment(segment, (_concepts(segment)[0],))
+
+    runtime.process_batch(session, FrameBatch((_frame(0, 0), _frame(1, 0.1), _frame(2, 0.2))))
+
+    frame_number, final_prompt = processor.geometry[-1]
+    assert frame_number == 2
+    assert final_prompt == pytest.approx([0.9, 0.4166667, 0.2, 0.3333333])
+    center_x, center_y, width, height = final_prompt
+    assert 0 <= center_x - width / 2 <= center_x + width / 2 <= 1
+    assert 0 <= center_y - height / 2 <= center_y + height / 2 <= 1
+
+
+def test_temporal_memory_expires_and_reports_new_basketball_identity() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                ([[10.0, 20.0, 30.0, 40.0]], [0.8]),
+                ([], []),
+                ([], []),
+                ([[12.0, 20.0, 32.0, 40.0]], [0.8]),
+            ]
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    runtime.load(ModelConfig(options={"temporal_max_gap_frames": 1, "temporal_max_gap_seconds": 10.0}))
+    session = runtime.start_segment(segment, (_concepts(segment)[0],))
+
+    result = runtime.process_batch(
+        session,
+        FrameBatch((_frame(0, 0), _frame(1, 0.1), _frame(2, 0.2), _frame(3, 0.3))),
+    )
+
+    assert [frame_number for frame_number, _box in processor.geometry] == [1, 2]
+    assert [item.local_track_id for item in result.observations] == ["basketball-1", "basketball-2"]
+    assert [event.kind for event in result.events] == [TrackingEventKind.IDENTITY_SWITCH]
+    assert runtime.close_segment(session).metrics.identity_switches == 1
+
+
+def test_temporal_continuation_is_basketball_only_and_rejects_inconsistent_low_scores() -> None:
+    processor = _SequencedProcessor(
+        {
+            "basketball": [
+                ([[10.0, 20.0, 30.0, 40.0]], [0.8]),
+                ([[150.0, 80.0, 195.0, 118.0]], [0.32]),
+            ],
+            "basketball player": [
+                ([[50.0, 10.0, 100.0, 110.0]], [0.8]),
+                ([[52.0, 10.0, 102.0, 110.0]], [0.32]),
+            ],
+        }
+    )
+    runtime = _sequenced_runtime(processor)
+    segment = _segment()
+    concepts = tuple(
+        prompt
+        for prompt in _concepts(segment)
+        if prompt.object_class in {TrackedObjectClass.BASKETBALL, TrackedObjectClass.PLAYER}
+    )
+    runtime.load(ModelConfig(options={"continuation_confidence_threshold": 0.3}))
+    session = runtime.start_segment(segment, concepts)
+
+    result = runtime.process_batch(session, FrameBatch((_frame(0, 0), _frame(1, 0.1))))
+
+    assert [(item.frame_index, item.object_class) for item in result.observations] == [
+        (0, TrackedObjectClass.BASKETBALL),
+        (0, TrackedObjectClass.PLAYER),
+    ]
+    assert len(processor.geometry) == 1
+    assert processor.geometry[0][0] == 1
 
 
 def test_runtime_rejects_mask_cross_segment_and_closed_sessions() -> None:
